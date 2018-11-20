@@ -1,9 +1,12 @@
+-- $Id: literals.lua,v 1.36 2016/11/07 13:11:28 roberto Exp $
+-- See Copyright Notice in file all.lua
+
 print('testing scanner')
 
-debug = require "debug"
+local debug = require "debug"
 
 
-local function dostring (x) return assert(load(x))() end
+local function dostring (x) return assert(load(x), "")() end
 
 dostring("x \v\f = \t\r 'a\0a' \v\f\f")
 assert(x == 'a\0a' and string.len(x) == 3)
@@ -28,7 +31,8 @@ assert(010 .. 020 .. -030 == "1020-30")
 assert("\x00\x05\x10\x1f\x3C\xfF\xe8" == "\0\5\16\31\60\255\232")
 
 local function lexstring (x, y, n)
-  local f = assert(load('return '..x..', debug.getinfo(1).currentline'))
+  local f = assert(load('return ' .. x ..
+            ', require"debug".getinfo(1).currentline', ''))
   local s, l = f()
   assert(s == y and l == n)
 end
@@ -47,12 +51,30 @@ assert("abc\z
         ghi\z
        " == 'abcdefghi')
 
+
+-- UTF-8 sequences
+assert("\u{0}\u{00000000}\x00\0" == string.char(0, 0, 0, 0))
+
+-- limits for 1-byte sequences
+assert("\u{0}\u{7F}" == "\x00\z\x7F")
+
+-- limits for 2-byte sequences
+assert("\u{80}\u{7FF}" == "\xC2\x80\z\xDF\xBF")
+
+-- limits for 3-byte sequences
+assert("\u{800}\u{FFFF}" ==   "\xE0\xA0\x80\z\xEF\xBF\xBF")
+
+-- limits for 4-byte sequences
+assert("\u{10000}\u{10FFFF}" == "\xF0\x90\x80\x80\z\xF4\x8F\xBF\xBF")
+
+
 -- Error in escape sequences
 local function lexerror (s, err)
-  local st, msg = load('return '..s)
-  if err ~= '<eof>' then err = "'"..err.."'" end
-  assert(not st and string.find(msg, "near "..err, 1, true))
+  local st, msg = load('return ' .. s, '')
+  if err ~= '<eof>' then err = err .. "'" end
+  assert(not st and string.find(msg, "near .-" .. err))
 end
+
 lexerror([["abc\x"]], [[\x"]])
 lexerror([["abc\x]], [[\x]])
 lexerror([["\x]], [[\x]])
@@ -61,16 +83,24 @@ lexerror([["\x5]], [[\x5]])
 lexerror([["\xr"]], [[\xr]])
 lexerror([["\xr]], [[\xr]])
 lexerror([["\x.]], [[\x.]])
-lexerror([["\x8%"]], [[\x8%]])
+lexerror([["\x8%"]], [[\x8%%]])
 lexerror([["\xAG]], [[\xAG]])
 lexerror([["\g"]], [[\g]])
 lexerror([["\g]], [[\g]])
-lexerror([["\."]], [[\.]])
+lexerror([["\."]], [[\%.]])
 
-lexerror([["\999"]], [[\999]])
-lexerror([["xyz\300"]], [[\300]])
-lexerror([["   \256"]], [[\256]])
+lexerror([["\999"]], [[\999"]])
+lexerror([["xyz\300"]], [[\300"]])
+lexerror([["   \256"]], [[\256"]])
 
+-- errors in UTF-8 sequences
+lexerror([["abc\u{110000}"]], [[abc\u{110000]])   -- too large
+lexerror([["abc\u11r"]], [[abc\u1]])    -- missing '{'
+lexerror([["abc\u"]], [[abc\u"]])    -- missing '{'
+lexerror([["abc\u{11r"]], [[abc\u{11r]])    -- missing '}'
+lexerror([["abc\u{11"]], [[abc\u{11"]])    -- missing '}'
+lexerror([["abc\u{11]], [[abc\u{11]])    -- missing '}'
+lexerror([["abc\u{r"]], [[abc\u{r]])     -- no digits
 
 -- unfinished strings
 lexerror("[=[alo]]", "<eof>")
@@ -84,19 +114,24 @@ lexerror([['alo \98]], "<eof>")
 -- valid characters in variable names
 for i = 0, 255 do
   local s = string.char(i)
-  assert(not string.find(s, "[a-zA-Z_]") == not load(s .. "=1"))
+  assert(not string.find(s, "[a-zA-Z_]") == not load(s .. "=1", ""))
   assert(not string.find(s, "[a-zA-Z_0-9]") ==
-         not load("a" .. s .. "1 = 1"))
+         not load("a" .. s .. "1 = 1", ""))
 end
 
 
 -- long variable names
 
-var = string.rep('a', 15000)
-prog = string.format("%s = 5", var)
-dostring(prog)
-assert(_G[var] == 5)
-var = nil
+var1 = string.rep('a', 15000) .. '1'
+var2 = string.rep('a', 15000) .. '2'
+prog = string.format([[
+  %s = 5
+  %s = %s + 1
+  return function () return %s - %s end
+]], var1, var2, var1, var1, var2)
+local f = dostring(prog)
+assert(_G[var1] == 5 and _G[var2] == 6 and f() == -1)
+var1, var2, f = nil
 print('+')
 
 -- escapes --
@@ -113,15 +148,15 @@ assert(string.len(b) == 960)
 prog = [=[
 print('+')
 
-a1 = [["isto e' um string com várias 'aspas'"]]
-a2 = "'aspas'"
+a1 = [["this is a 'string' with several 'quotes'"]]
+a2 = "'quotes'"
 
-assert(string.find(a1, a2) == 31)
+assert(string.find(a1, a2) == 34)
 print('+')
 
-a1 = [==[temp = [[um valor qualquer]]; ]==]
+a1 = [==[temp = [[an arbitrary value]]; ]==]
 assert(load(a1))()
-assert(temp == 'um valor qualquer')
+assert(temp == 'an arbitrary value')
 -- long strings --
 b = "001234567890123456789012345678901234567891234567890123456789012345678901234567890012345678901234567890123456789012345678912345678901234567890123456789012345678900123456789012345678901234567890123456789123456789012345678901234567890123456789001234567890123456789012345678901234567891234567890123456789012345678901234567890012345678901234567890123456789012345678912345678901234567890123456789012345678900123456789012345678901234567890123456789123456789012345678901234567890123456789001234567890123456789012345678901234567891234567890123456789012345678901234567890012345678901234567890123456789012345678912345678901234567890123456789012345678900123456789012345678901234567890123456789123456789012345678901234567890123456789001234567890123456789012345678901234567891234567890123456789012345678901234567890012345678901234567890123456789012345678912345678901234567890123456789012345678900123456789012345678901234567890123456789123456789012345678901234567890123456789"
 assert(string.len(b) == 960)
@@ -178,7 +213,7 @@ hi
 y = "\
 hello\r\n\
 "
-return debug.getinfo(1).currentline
+return require"debug".getinfo(1).currentline
 ]]
 
 for _, n in pairs{"\n", "\r", "\n\r", "\r\n"} do
@@ -222,25 +257,34 @@ local function gen (c, n)
 end
 
 for s in coroutine.wrap(function () gen("", len) end) do
-  assert(s == load("return [====[\n"..s.."]====]")())
+  assert(s == load("return [====[\n"..s.."]====]", "")())
 end
 
 
 -- testing decimal point locale
 if os.setlocale("pt_BR") or os.setlocale("ptb") then
-  assert(not load("á = 3"))  -- parser still works with C locale
+  assert(tonumber("3,4") == 3.4 and tonumber"3.4" == 3.4)
+  assert(tonumber("  -.4  ") == -0.4)
+  assert(tonumber("  +0x.41  ") == 0X0.41)
   assert(not load("a = (3,4)"))
-  assert(tonumber("3,4") == 3.4 and tonumber"3.4" == nil)
   assert(assert(load("return 3.4"))() == 3.4)
   assert(assert(load("return .4,3"))() == .4)
   assert(assert(load("return 4."))() == 4.)
   assert(assert(load("return 4.+.5"))() == 4.5)
+
+  assert(" 0x.1 " + " 0x,1" + "-0X.1\t" == 0x0.1)
+
+  assert(tonumber"inf" == nil and tonumber"NAN" == nil)
+
+  assert(assert(load(string.format("return %q", 4.51)))() == 4.51)
+
   local a,b = load("return 4.5.")
   assert(string.find(b, "'4%.5%.'"))
+
   assert(os.setlocale("C"))
 else
   (Message or print)(
-   '\a\n >>> pt_BR locale not available: skipping decimal point tests <<<\n\a')
+   '\n >>> pt_BR locale not available: skipping decimal point tests <<<\n')
 end
 
 

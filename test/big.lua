@@ -1,3 +1,6 @@
+-- $Id: big.lua,v 1.32 2016/11/07 13:11:28 roberto Exp $
+-- See Copyright Notice in file all.lua
+
 if _soft then
   return 'a'
 end
@@ -52,14 +55,14 @@ f, X = nil
 
 coroutine.yield'b'
 
-if not _no32 then   -- {
+if 2^32 == 0 then   -- (small integers) {   
 
 print "testing string length overflow"
 
 local repstrings = 192          -- number of strings to be concatenated
-local ssize = math.ceil(2^32 / repstrings) + 1   -- size of each string
+local ssize = math.ceil(2.0^32 / repstrings) + 1   -- size of each string
 
-assert(repstrings * ssize > 2^32)  -- this should be larger than maximum size_t
+assert(repstrings * ssize > 2.0^32)  -- it should be larger than maximum size
 
 local longs = string.rep("\0", ssize)   -- create one long string
 

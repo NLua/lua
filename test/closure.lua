@@ -1,3 +1,6 @@
+-- $Id: closure.lua,v 1.59 2016/11/07 13:11:28 roberto Exp $
+-- See Copyright Notice in file all.lua
+
 print "testing closures"
 
 local A,B = 0,{g=10}

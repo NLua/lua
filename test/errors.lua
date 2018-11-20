@@ -1,3 +1,6 @@
+-- $Id: errors.lua,v 1.94 2016/12/21 19:23:02 roberto Exp $
+-- See Copyright Notice in file all.lua
+
 print("testing errors")
 
 local debug = require"debug"
@@ -7,7 +10,13 @@ local mt = getmetatable(_G) or {}
 local oldmm = mt.__index
 mt.__index = nil
 
-function doit (s)
+local function checkerr (msg, f, ...)
+  local st, err = pcall(f, ...)
+  assert(not st and string.find(err, msg))
+end
+
+
+local function doit (s)
   local f, msg = load(s)
   if f == nil then return msg end
   local cond, msg = pcall(f)
@@ -15,12 +24,12 @@ function doit (s)
 end
 
 
-function checkmessage (prog, msg)
+local function checkmessage (prog, msg)
   local m = doit(prog)
   assert(string.find(m, msg, 1, true))
 end
 
-function checksyntax (prog, extra, token, line)
+local function checksyntax (prog, extra, token, line)
   local msg = doit(prog)
   if not string.find(token, "^<%a") and not string.find(token, "^char%(")
     then token = "'"..token.."'" end
@@ -40,9 +49,7 @@ assert(doit("error()") == nil)
 
 
 -- test common errors/errors that crashed in the past
-if not _no32 then
-  assert(doit("table.unpack({}, 1, n=2^30)"))
-end
+assert(doit("table.unpack({}, 1, n=2^30)"))
 assert(doit("a=math.sin()"))
 assert(not doit("tostring(1)") and doit("tostring()"))
 assert(doit"tonumber()")
@@ -62,14 +69,20 @@ checksyntax([[
 
 -- tests for better error messages
 
+checkmessage("a = {} + 1", "arithmetic")
+checkmessage("a = {} | 1", "bitwise operation")
+checkmessage("a = {} < 1", "attempt to compare")
+checkmessage("a = {} <= 1", "attempt to compare")
+
 checkmessage("a=1; bbbb=2; a=math.sin(3)+bbbb(3)", "global 'bbbb'")
-checkmessage("a=1; local a,bbbb=2,3; a = math.sin(1) and bbbb(3)",
-       "local 'bbbb'")
 checkmessage("a={}; do local a=1 end a:bbbb(3)", "method 'bbbb'")
 checkmessage("local a={}; a.bbbb(3)", "field 'bbbb'")
 assert(not string.find(doit"a={13}; local bbbb=1; a[bbbb](3)", "'bbbb'"))
 checkmessage("a={13}; local bbbb=1; a[bbbb](3)", "number")
 checkmessage("a=(1)..{}", "a table value")
+
+checkmessage("a = #print", "length of a function value")
+checkmessage("a = #3", "length of a number value")
 
 aaa = nil
 checkmessage("aaa.bbb:ddd(9)", "global 'aaa'")
@@ -78,17 +91,49 @@ checkmessage("local aaa={bbb={}}; aaa.bbb:ddd(9)", "method 'ddd'")
 checkmessage("local a,b,c; (function () a = b+1 end)()", "upvalue 'b'")
 assert(not doit"local aaa={bbb={ddd=next}}; aaa.bbb:ddd(nil)")
 
+-- upvalues being indexed do not go to the stack
+checkmessage("local a,b,cc; (function () a = cc[1] end)()", "upvalue 'cc'")
+checkmessage("local a,b,cc; (function () a.x = 1 end)()", "upvalue 'a'")
+
 checkmessage("local _ENV = {x={}}; a = a + 1", "global 'a'")
 
 checkmessage("b=1; local aaa='a'; x=aaa+b", "local 'aaa'")
 checkmessage("aaa={}; x=3/aaa", "global 'aaa'")
 checkmessage("aaa='2'; b=nil;x=aaa*b", "global 'b'")
 checkmessage("aaa={}; x=-aaa", "global 'aaa'")
+
+-- short circuit
+checkmessage("a=1; local a,bbbb=2,3; a = math.sin(1) and bbbb(3)",
+       "local 'bbbb'")
+checkmessage("a=1; local a,bbbb=2,3; a = bbbb(1) or a(3)", "local 'bbbb'")
+checkmessage("local a,b,c,f = 1,1,1; f((a and b) or c)", "local 'f'")
+checkmessage("local a,b,c = 1,1,1; ((a and b) or c)()", "call a number value")
 assert(not string.find(doit"aaa={}; x=(aaa or aaa)+(aaa and aaa)", "'aaa'"))
 assert(not string.find(doit"aaa={}; (aaa or aaa)()", "'aaa'"))
 
-checkmessage("print(print < 10)", "function")
-checkmessage("print(print < print)", "two function")
+checkmessage("print(print < 10)", "function with number")
+checkmessage("print(print < print)", "two function values")
+checkmessage("print('10' < 10)", "string with number")
+checkmessage("print(10 < '23')", "number with string")
+
+-- float->integer conversions
+checkmessage("local a = 2.0^100; x = a << 2", "local a")
+checkmessage("local a = 1 >> 2.0^100", "has no integer representation")
+checkmessage("local a = '10' << 2.0^100", "has no integer representation")
+checkmessage("local a = 2.0^100 & 1", "has no integer representation")
+checkmessage("local a = 2.0^100 & '1'", "has no integer representation")
+checkmessage("local a = 2.0 | 1e40", "has no integer representation")
+checkmessage("local a = 2e100 ~ 1", "has no integer representation")
+checkmessage("string.sub('a', 2.0^100)", "has no integer representation")
+checkmessage("string.rep('a', 3.3)", "has no integer representation")
+checkmessage("return 6e40 & 7", "has no integer representation")
+checkmessage("return 34 << 7e30", "has no integer representation")
+checkmessage("return ~-3e40", "has no integer representation")
+checkmessage("return ~-3.009", "has no integer representation")
+checkmessage("return 3.009 & 1", "has no integer representation")
+checkmessage("return 34 >> {}", "table value")
+checkmessage("a = 24 // 0", "divide by zero")
+checkmessage("a = 1 % 0", "'n%0'")
 
 
 -- passing light userdata instead of full userdata
@@ -100,10 +145,38 @@ checkmessage([[
 ]], "light userdata")
 _G.D = nil
 
+do   -- named objects (field '__name')
+  checkmessage("math.sin(io.input())", "(number expected, got FILE*)")
+  _G.XX = setmetatable({}, {__name = "My Type"})
+  assert(string.find(tostring(XX), "^My Type"))
+  checkmessage("io.input(XX)", "(FILE* expected, got My Type)")
+  checkmessage("return XX + 1", "on a My Type value")
+  checkmessage("return ~io.stdin", "on a FILE* value")
+  checkmessage("return XX < XX", "two My Type values")
+  checkmessage("return {} < XX", "table with My Type")
+  checkmessage("return XX < io.stdin", "My Type with FILE*")
+  _G.XX = nil
+end
 
 -- global functions
 checkmessage("(io.write or print){}", "io.write")
 checkmessage("(collectgarbage or print){}", "collectgarbage")
+
+-- errors in functions without debug info
+do
+  local f = function (a) return a + 1 end
+  f = assert(load(string.dump(f, true)))
+  assert(f(3) == 4)
+  checkerr("^%?:%-1:", f, {})
+
+  -- code with a move to a local var ('OP_MOV A B' with A<B)
+  f = function () local a; a = {}; return a + 2 end
+  -- no debug info (so that 'a' is unknown)
+  f = assert(load(string.dump(f, true)))
+  -- symbolic execution should not get lost
+  checkerr("^%?:%-1:.*table value", f)
+end
+
 
 -- tests for field accesses after RK limit
 local t = {}
@@ -149,6 +222,8 @@ checkmessage([[  -- tail call
 checkmessage([[collectgarbage("nooption")]], "invalid option")
 
 checkmessage([[x = print .. "a"]], "concatenate")
+checkmessage([[x = "a" .. false]], "concatenate")
+checkmessage([[x = {} .. 2]], "concatenate")
 
 checkmessage("getmetatable(io.stdin).__gc()", "no value")
 
@@ -167,12 +242,11 @@ checkmessage("string.sub('a', {})", "#2")
 checkmessage("('a'):sub{}", "#1")
 
 checkmessage("table.sort({1,2,3}, table.sort)", "'table.sort'")
--- next message may be 'setmetatable' or '_G.setmetatable'
-checkmessage("string.gsub('s', 's', setmetatable)", "setmetatable'")
+checkmessage("string.gsub('s', 's', setmetatable)", "'setmetatable'")
 
 -- tests for errors in coroutines
 
-function f (n)
+local function f (n)
   local c = coroutine.create(f)
   local a,b = coroutine.resume(c)
   return b
@@ -181,9 +255,8 @@ assert(string.find(f(), "C stack overflow"))
 
 checkmessage("coroutine.yield()", "outside a coroutine")
 
-f1 = function () table.sort({1,2,3}, coroutine.yield) end
-f = coroutine.wrap(function () return pcall(f1) end)
-assert(string.find(select(2, f()), "yield across"))
+f = coroutine.wrap(function () table.sort({1,2,3}, coroutine.yield) end)
+checkerr("yield across", f)
 
 
 -- testing size of 'source' info; size of buffer for that info is
@@ -249,8 +322,8 @@ x
 ]], 6)
 
 local p = [[
-function g() f() end
-function f(x) error('a', X) end
+  function g() f() end
+  function f(x) error('a', X) end
 g()
 ]]
 X=3;lineerror((p), 3)
@@ -261,6 +334,8 @@ X=2;lineerror((p), 1)
 
 if not _soft then
   -- several tests that exaust the Lua stack
+  collectgarbage()
+  print"testing stack overflow"
   C = 0
   local l = debug.getinfo(1, "l").currentline; function y () C=C+1; y() end
 
@@ -316,25 +391,53 @@ if not _soft then
  
   local res, msg = xpcall(loop, function (m)
     assert(string.find(m, "stack overflow"))
-    local res, msg = pcall(loop)
-    assert(string.find(msg, "error handling"))
+    checkerr("error handling", loop)
     assert(math.sin(0) == 0)
     return 15
   end)
   assert(msg == 15)
 
-  res, msg = pcall(function ()
+  local f = function ()
     for i = 999900, 1000000, 1 do table.unpack({}, 1, i) end
-  end)
-  assert(string.find(msg, "too many results"))
+  end
+  checkerr("too many results", f)
 
 end
 
 
--- non string messages
-function f() error{msg='x'} end
-res, msg = xpcall(f, function (r) return {msg=r.msg..'y'} end)
-assert(msg.msg == 'xy')
+do
+  -- non string messages
+  local t = {}
+  local res, msg = pcall(function () error(t) end)
+  assert(not res and msg == t)
+
+  res, msg = pcall(function () error(nil) end)
+  assert(not res and msg == nil)
+
+  local function f() error{msg='x'} end
+  res, msg = xpcall(f, function (r) return {msg=r.msg..'y'} end)
+  assert(msg.msg == 'xy')
+
+  -- 'assert' with extra arguments
+  res, msg = pcall(assert, false, "X", t)
+  assert(not res and msg == "X")
+ 
+  -- 'assert' with no message
+  res, msg = pcall(function () assert(false) end)
+  local line = string.match(msg, "%w+%.lua:(%d+): assertion failed!$")
+  assert(tonumber(line) == debug.getinfo(1, "l").currentline - 2)
+
+  -- 'assert' with non-string messages
+  res, msg = pcall(assert, false, t)
+  assert(not res and msg == t)
+
+  res, msg = pcall(assert, nil, nil)
+  assert(not res and msg == nil)
+
+  -- 'assert' without arguments
+  res, msg = pcall(assert)
+  assert(not res and string.find(msg, "value expected"))
+end
 
 -- xpcall with arguments
 a, b, c = xpcall(string.find, error, "alo", "al")
@@ -342,14 +445,20 @@ assert(a and b == 1 and c == 2)
 a, b, c = xpcall(string.find, function (x) return {} end, true, "al")
 assert(not a and type(b) == "table" and c == nil)
 
-print('+')
+
+print("testing tokens in error messages")
 checksyntax("syntax error", "", "error", 1)
 checksyntax("1.000", "", "1.000", 1)
 checksyntax("[[a]]", "", "[[a]]", 1)
 checksyntax("'aa'", "", "'aa'", 1)
+checksyntax("while << do end", "", "<<", 1)
+checksyntax("for >> do end", "", ">>", 1)
+
+-- test invalid non-printable char in a chunk
+checksyntax("a\1a = 1", "", "<\\1>", 1)
 
 -- test 255 as first char in a chunk
-checksyntax("\255a = 1", "", "char(255)", 1)
+checksyntax("\255a = 1", "", "<\\255>", 1)
 
 doit('I = load("a=9+"); a=3')
 assert(a==3 and I == nil)
@@ -364,27 +473,33 @@ end
 
 
 -- testing syntax limits
-local function testrep (init, rep)
-  local s = "local a; "..init .. string.rep(rep, 400)
-  local a,b = load(s)
-  assert(not a and string.find(b, "levels"))
-end
-testrep("a=", "{")
-testrep("a=", "(")
-testrep("", "a(")
-testrep("", "do ")
-testrep("", "while a do ")
-testrep("", "if a then else ")
-testrep("", "function foo () ")
-testrep("a=", "a..")
-testrep("a=", "a^")
 
-local s = ("a,"):rep(200).."a=nil"
-local a,b = load(s)
-assert(not a and string.find(b, "levels"))
+local maxClevel = 200    -- LUAI_MAXCCALLS (in llimits.h)
+
+local function testrep (init, rep, close, repc)
+  local s = init .. string.rep(rep, maxClevel - 10) .. close ..
+               string.rep(repc, maxClevel - 10)
+  assert(load(s))   -- 190 levels is OK
+  s = init .. string.rep(rep, maxClevel + 1)
+  checkmessage(s, "too many C levels")
+end
+
+testrep("local a; a", ",a", "= 1", ",1")    -- multiple assignment
+testrep("local a; a=", "{", "0", "}")
+testrep("local a; a=", "(", "2", ")")
+testrep("local a; ", "a(", "2", ")")
+testrep("", "do ", "", " end")
+testrep("", "while a do ", "", " end")
+testrep("local a; ", "if a then else ", "", " end")
+testrep("", "function foo () ", "", " end")
+testrep("local a; a=", "a..", "a", "")
+testrep("local a; a=", "a^", "a", "")
+
+checkmessage("a = f(x" .. string.rep(",x", 260) .. ")", "too many registers")
 
 
 -- testing other limits
+
 -- upvalues
 local lim = 127
 local  s = "local function fooA ()\n  local "
@@ -415,7 +530,7 @@ for j = 1,300 do
 end
 s = s.."b\n"
 local a,b = load(s)
-assert(string.find(b, "line 2"))
+assert(string.find(b, "line 2") and string.find(b, "too many local variables"))
 
 mt.__index = oldmm
 

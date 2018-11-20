@@ -1,4 +1,13 @@
+-- $Id: nextvar.lua,v 1.79 2016/11/07 13:11:28 roberto Exp $
+-- See Copyright Notice in file all.lua
+
 print('testing tables, next, and for')
+
+local function checkerror (msg, f, ...)
+  local s, err = pcall(f, ...)
+  assert(not s and string.find(err, msg))
+end
+
 
 local a = {}
 
@@ -33,7 +42,11 @@ assert(i == 4)
 -- iterator function is always the same
 assert(type(ipairs{}) == 'function' and ipairs{} == ipairs{})
 
-if T then  --[
+
+if not T then
+  (Message or print)
+    ('\n >>> testC not active: skipping tests for table sizes <<<\n')
+else --[
 -- testing table sizes
 
 local function log2 (x) return math.log(x, 2) end
@@ -51,7 +64,11 @@ local function fb (n)
 end
 
 -- test fb function
-local a = 1
+for a = 1, 10000 do   -- all numbers up to 10^4
+  local n = fb(a)
+  assert(a <= n and n <= a*1.125)
+end
+local a = 1024   -- plus a few up to 2 ^30
 local lim = 2^30
 while a < lim do
   local n = fb(a)
@@ -84,7 +101,7 @@ for i=1,lim do
   s = s..i..','
   local s = s
   for k=0,lim do 
-    local t = load(s..'}')()
+    local t = load(s..'}', '')()
     assert(#t == i)
     check(t, fb(i), mp2(k))
     s = string.format('%sa%d=%d,', s, k, k)
@@ -127,7 +144,7 @@ end
 a = {}
 for i=1,16 do a[i] = i end
 check(a, 16, 0)
-if not _port then
+do
   for i=1,11 do a[i] = nil end
   for i=30,50 do a[i] = nil end   -- force a rehash (?)
   check(a, 0, 8)   -- only 5 elements in the table
@@ -209,6 +226,13 @@ assert(nofind==find("return"))
 _G["xxx"] = 1
 assert(xxx==find("xxx"))
 
+-- invalid key to 'next'
+checkerror("invalid key", next, {10,20}, 3)
+
+-- both 'pairs' and 'ipairs' need an argument
+checkerror("bad argument", pairs)
+checkerror("bad argument", ipairs)
+
 print('+')
 
 a = {}
@@ -282,7 +306,7 @@ table.maxn = nil
 
 -- int overflow
 a = {}
-for i=0,50 do a[math.pow(2,i)] = true end
+for i=0,50 do a[2^i] = true end
 assert(a[#a])
 
 print('+')
@@ -304,10 +328,13 @@ assert(n == 5)
 
 
 local function test (a)
+  assert(not pcall(table.insert, a, 2, 20));
   table.insert(a, 10); table.insert(a, 2, 20);
   table.insert(a, 1, -1); table.insert(a, 40);
   table.insert(a, #a+1, 50)
   table.insert(a, 2, -2)
+  assert(not pcall(table.insert, a, 0, 20));
+  assert(not pcall(table.insert, a, #a + 2, 20));
   assert(table.remove(a,1) == -1)
   assert(table.remove(a,1) == -2)
   assert(table.remove(a,1) == 10)
@@ -315,6 +342,8 @@ local function test (a)
   assert(table.remove(a,1) == 40)
   assert(table.remove(a,1) == 50)
   assert(table.remove(a,1) == nil)
+  assert(table.remove(a) == nil)
+  assert(table.remove(a, #a) == nil)
 end
 
 a = {n=0, [-7] = "ban"}
@@ -325,11 +354,18 @@ a = {[-7] = "ban"};
 test(a)
 assert(a.n == nil and #a == 0 and a[-7] == "ban")
 
+a = {[-1] = "ban"}
+test(a)
+assert(#a == 0 and table.remove(a) == nil and a[-1] == "ban")
+
+a = {[0] = "ban"}
+assert(#a == 0 and table.remove(a) == "ban" and a[0] == nil)
 
 table.insert(a, 1, 10); table.insert(a, 1, 20); table.insert(a, 1, -1)
 assert(table.remove(a) == 10)
 assert(table.remove(a) == 20)
 assert(table.remove(a) == -1)
+assert(table.remove(a) == nil)
 
 a = {'c', 'd'}
 table.insert(a, 3, 'a')
@@ -338,16 +374,101 @@ assert(table.remove(a, 1) == 'c')
 assert(table.remove(a, 1) == 'd')
 assert(table.remove(a, 1) == 'a')
 assert(table.remove(a, 1) == 'b')
+assert(table.remove(a, 1) == nil)
 assert(#a == 0 and a.n == nil)
 
 a = {10,20,30,40}
 assert(table.remove(a, #a + 1) == nil)
-assert(table.remove(a, #a + 1) == nil) -- for some reason 5.2.2 doesn like table.remove(a, 0)
+assert(not pcall(table.remove, a, 0))
 assert(a[#a] == 40)
 assert(table.remove(a, #a) == 40)
 assert(a[#a] == 30)
 assert(table.remove(a, 2) == 20)
 assert(a[#a] == 30 and #a == 2)
+
+do   -- testing table library with metamethods
+  local function test (proxy, t)
+    for i = 1, 10 do
+      table.insert(proxy, 1, i)
+    end
+    assert(#proxy == 10 and #t == 10)
+    for i = 1, 10 do
+      assert(t[i] == 11 - i)
+    end
+    table.sort(proxy)
+    for i = 1, 10 do
+      assert(t[i] == i and proxy[i] == i)
+    end
+    assert(table.concat(proxy, ",") == "1,2,3,4,5,6,7,8,9,10")
+    for i = 1, 8 do
+      assert(table.remove(proxy, 1) == i)
+    end
+    assert(#proxy == 2 and #t == 2)
+    local a, b, c = table.unpack(proxy)
+    assert(a == 9 and b == 10 and c == nil)
+  end
+
+  -- all virtual
+  local t = {}
+  local proxy = setmetatable({}, {
+    __len = function () return #t end,
+    __index = t,
+    __newindex = t,
+  })
+  test(proxy, t)
+
+  -- only __newindex
+  local count = 0
+  t = setmetatable({}, {
+    __newindex = function (t,k,v) count = count + 1; rawset(t,k,v) end})
+  test(t, t)
+  assert(count == 10)   -- after first 10, all other sets are not new
+
+  -- no __newindex
+  t = setmetatable({}, {
+    __index = function (_,k) return k + 1 end,
+    __len = function (_) return 5 end})
+  assert(table.concat(t, ";") == "2;3;4;5;6")
+
+end
+
+
+if not T then
+  (Message or print)
+    ('\n >>> testC not active: skipping tests for table library on non-tables <<<\n')
+else --[
+  local debug = require'debug'
+  local tab = {10, 20, 30}
+  local mt = {}
+  local u = T.newuserdata(0)
+  checkerror("table expected", table.insert, u, 40)
+  checkerror("table expected", table.remove, u)
+  debug.setmetatable(u, mt)
+  checkerror("table expected", table.insert, u, 40)
+  checkerror("table expected", table.remove, u)
+  mt.__index = tab
+  checkerror("table expected", table.insert, u, 40)
+  checkerror("table expected", table.remove, u)
+  mt.__newindex = tab
+  checkerror("table expected", table.insert, u, 40)
+  checkerror("table expected", table.remove, u)
+  mt.__len = function () return #tab end
+  table.insert(u, 40)
+  assert(#u == 4 and #tab == 4 and u[4] == 40 and tab[4] == 40)
+  assert(table.remove(u) == 40)
+  table.insert(u, 1, 50)
+  assert(#u == 4 and #tab == 4 and u[4] == 30 and tab[1] == 50)
+
+  mt.__newindex = nil
+  mt.__len = nil
+  local tab2 = {}
+  local u2 = T.newuserdata(0) 
+  debug.setmetatable(u2, {__newindex = function (_, k, v) tab2[k] = v end})
+  table.move(u, 1, 4, 1, u2)
+  assert(#tab2 == 4 and tab2[1] == tab[1] and tab2[4] == tab[4])
+
+end -- ]
+
 print('+')
 
 a = {}
@@ -365,20 +486,82 @@ for i=0,1,-1 do error'not here' end
 a = nil; for i=1,1 do assert(not a); a=1 end; assert(a)
 a = nil; for i=1,1,-1 do assert(not a); a=1 end; assert(a)
 
-if not _port then
-  print("testing precision in numeric for")
-  local a = 0; for i=0, 1, 0.1 do a=a+1 end; assert(a==11)
-  a = 0; for i=0, 0.999999999, 0.1 do a=a+1 end; assert(a==10)
+do
+  print("testing floats in numeric for")
+  local a
+  -- integer count
   a = 0; for i=1, 1, 1 do a=a+1 end; assert(a==1)
-  a = 0; for i=1e10, 1e10, -1 do a=a+1 end; assert(a==1)
+  a = 0; for i=10000, 1e4, -1 do a=a+1 end; assert(a==1)
   a = 0; for i=1, 0.99999, 1 do a=a+1 end; assert(a==0)
-  a = 0; for i=99999, 1e5, -1 do a=a+1 end; assert(a==0)
+  a = 0; for i=9999, 1e4, -1 do a=a+1 end; assert(a==0)
   a = 0; for i=1, 0.99999, -1 do a=a+1 end; assert(a==1)
+
+  -- float count
+  a = 0; for i=0, 0.999999999, 0.1 do a=a+1 end; assert(a==10)
+  a = 0; for i=1.0, 1, 1 do a=a+1 end; assert(a==1)
+  a = 0; for i=-1.5, -1.5, 1 do a=a+1 end; assert(a==1)
+  a = 0; for i=1e6, 1e6, -1 do a=a+1 end; assert(a==1)
+  a = 0; for i=1.0, 0.99999, 1 do a=a+1 end; assert(a==0)
+  a = 0; for i=99999, 1e5, -1.0 do a=a+1 end; assert(a==0)
+  a = 0; for i=1.0, 0.99999, -1 do a=a+1 end; assert(a==1)
 end
 
 -- conversion
 a = 0; for i="10","1","-2" do a=a+1 end; assert(a==5)
 
+do  -- checking types
+  local c
+  local function checkfloat (i)
+    assert(math.type(i) == "float")
+    c = c + 1
+  end
+
+  c = 0; for i = 1.0, 10 do checkfloat(i) end
+  assert(c == 10)
+
+  c = 0; for i = -1, -10, -1.0 do checkfloat(i) end
+  assert(c == 10)
+
+  local function checkint (i)
+    assert(math.type(i) == "integer")
+    c = c + 1
+  end
+
+  local m = math.maxinteger
+  c = 0; for i = m, m - 10, -1 do checkint(i) end
+  assert(c == 11)
+
+  c = 0; for i = 1, 10.9 do checkint(i) end
+  assert(c == 10)
+
+  c = 0; for i = 10, 0.001, -1 do checkint(i) end
+  assert(c == 10)
+
+  c = 0; for i = 1, "10.8" do checkint(i) end
+  assert(c == 10)
+
+  c = 0; for i = 9, "3.4", -1 do checkint(i) end
+  assert(c == 6)
+
+  c = 0; for i = 0, " -3.4  ", -1 do checkint(i) end
+  assert(c == 4)
+
+  c = 0; for i = 100, "96.3", -2 do checkint(i) end
+  assert(c == 2)
+
+  c = 0; for i = 1, math.huge do if i > 10 then break end; checkint(i) end
+  assert(c == 10)
+
+  c = 0; for i = -1, -math.huge, -1 do
+           if i < -10 then break end; checkint(i)
+          end
+  assert(c == 10)
+
+
+  for i = math.mininteger, -10e100 do assert(false) end
+  for i = math.maxinteger, 10e100, -1 do assert(false) end
+
+end
 
 collectgarbage()
 
@@ -433,15 +616,15 @@ end
 a.n = 5
 a[3] = 30
 
+-- testing ipairs with metamethods
 a = {n=10}
-setmetatable(a, {__len = function (x) return x.n end,
-                 __ipairs = function (x) return function (e,i)
-                             if i < #e then return i+1 end
-                           end, x, 0 end})
+setmetatable(a, { __index = function (t,k)
+                     if k <= t.n then return k * 10 end 
+                  end})
 i = 0
 for k,v in ipairs(a) do
   i = i + 1
-  assert(k == i and v == nil)
+  assert(k == i and v == i * 10)
 end
 assert(i == a.n)
 

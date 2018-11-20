@@ -1,3 +1,8 @@
+-- $Id: goto.lua,v 1.13 2016/11/07 13:11:28 roberto Exp $
+-- See Copyright Notice in file all.lua
+
+collectgarbage()
+
 local function errmsg (code, m)
   local st, msg = load(code)
   assert(not st and string.find(msg, m))
@@ -43,6 +48,24 @@ do
   ::l1:: x = y; goto l2
 end
 ::l3:: ::l3_1:: assert(x == 13)
+
+
+-- long labels
+do
+  local prog = [[
+  do
+    local a = 1
+    goto l%sa; a = a + 1
+   ::l%sa:: a = a + 10
+    goto l%sb; a = a + 2
+   ::l%sb:: a = a + 20
+    return a
+  end
+  ]]
+  local label = string.rep("0123456789", 40)
+  prog = string.format(prog, label, label, label, label)
+  assert(assert(load(prog))() == 31)
+end
 
 -- goto to correct label when nested
 do goto l3; ::l3:: end   -- does not loop jumping to previous label 'l3'
@@ -90,32 +113,86 @@ end
 ::l6:: foo()
 
 
+do   -- bug in 5.2 -> 5.3.2
+  local x
+  ::L1::
+  local y             -- cannot join this SETNIL with previous one
+  assert(y == nil)
+  y = true
+  if x == nil then
+    x = 1
+    goto L1
+  else
+    x = x + 1
+  end
+  assert(x == 2 and y == true)
+end
 
 --------------------------------------------------------------------------------
 -- testing closing of upvalues
 
+local debug = require 'debug'
+
 local function foo ()
-  local a = {}
+  local t = {}
   do
   local i = 1
-  local k = 0
-  a[0] = function (y) k = y end
-  ::l1:: do
-    local x
+  local a, b, c, d
+  t[1] = function () return a, b, c, d end
+  ::l1::
+  local b
+  do
+    local c
+    t[#t + 1] = function () return a, b, c, d end    -- t[2], t[4], t[6]
     if i > 2 then goto l2 end
-    a[i] = function (y) if y then x = y else return x + k end end
-    i = i + 1
-    goto l1
+    do
+      local d
+      t[#t + 1] = function () return a, b, c, d end   -- t[3], t[5]
+      i = i + 1
+      local a
+      goto l1
+    end
   end
   end
-  ::l2:: return a
+  ::l2:: return t
 end
 
 local a = foo()
-a[1](10); a[2](20)
-assert(a[1]() == 10 and a[2]() == 20 and a[3] == nil)
-a[0](13)
-assert(a[1]() == 23 and a[2]() == 33)
+assert(#a == 6)
+
+-- all functions share same 'a'
+for i = 2, 6 do
+  assert(debug.upvalueid(a[1], 1) == debug.upvalueid(a[i], 1))
+end
+
+-- 'b' and 'c' are shared among some of them
+for i = 2, 6 do
+  -- only a[1] uses external 'b'/'b'
+  assert(debug.upvalueid(a[1], 2) ~= debug.upvalueid(a[i], 2))
+  assert(debug.upvalueid(a[1], 3) ~= debug.upvalueid(a[i], 3))
+end
+
+for i = 3, 5, 2 do
+  -- inner functions share 'b'/'c' with previous ones
+  assert(debug.upvalueid(a[i], 2) == debug.upvalueid(a[i - 1], 2))
+  assert(debug.upvalueid(a[i], 3) == debug.upvalueid(a[i - 1], 3))
+  -- but not with next ones
+  assert(debug.upvalueid(a[i], 2) ~= debug.upvalueid(a[i + 1], 2))
+  assert(debug.upvalueid(a[i], 3) ~= debug.upvalueid(a[i + 1], 3))
+end
+
+-- only external 'd' is shared
+for i = 2, 6, 2 do
+  assert(debug.upvalueid(a[1], 4) == debug.upvalueid(a[i], 4))
+end
+
+-- internal 'd's are all different
+for i = 3, 5, 2 do
+  for j = 1, 6 do
+    assert((debug.upvalueid(a[i], 4) == debug.upvalueid(a[j], 4))
+      == (i == j))
+  end
+end
 
 --------------------------------------------------------------------------------
 -- testing if x goto optimizations

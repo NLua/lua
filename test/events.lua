@@ -1,4 +1,9 @@
+-- $Id: events.lua,v 1.45 2016/12/21 19:23:02 roberto Exp $
+-- See Copyright Notice in file all.lua
+
 print('testing metatables')
+
+local debug = require'debug'
 
 X = 20; B = 30
 
@@ -16,10 +21,10 @@ assert(B == 30)
 assert(getmetatable{} == nil)
 assert(getmetatable(4) == nil)
 assert(getmetatable(nil) == nil)
-a={}; setmetatable(a, {__metatable = "xuxu",
+a={name = "NAME"}; setmetatable(a, {__metatable = "xuxu",
                     __tostring=function(x) return x.name end})
 assert(getmetatable(a) == "xuxu")
-assert(tostring(a) == nil)
+assert(tostring(a) == "NAME")
 -- cannot change a protected metatable
 assert(pcall(setmetatable, a, {}) == false)
 a.name = "gororoba"
@@ -52,6 +57,14 @@ setmetatable(t, t)   -- causes a bug in 5.1 !
 t.__newindex = f
 a[1] = 30; a.x = "101"; a[5] = 200
 assert(a[1] == 27 and a.x == 98 and a[5] == 197)
+
+do    -- bug in Lua 5.3.2
+  local mt = {}
+  mt.__newindex = mt
+  local t = setmetatable({}, mt)
+  t[1] = 10     -- will segfault on some machines
+  assert(mt[1] == 10)
+end
 
 
 local c = {}
@@ -109,10 +122,17 @@ t.__add = f("add")
 t.__sub = f("sub")
 t.__mul = f("mul")
 t.__div = f("div")
+t.__idiv = f("idiv")
 t.__mod = f("mod")
 t.__unm = f("unm")
 t.__pow = f("pow")
 t.__len = f("len")
+t.__band = f("band")
+t.__bor = f("bor")
+t.__bxor = f("bxor")
+t.__shl = f("shl")
+t.__shr = f("shr")
+t.__bnot = f("bnot")
 
 assert(b+5 == b)
 assert(cap[0] == "add" and cap[1] == b and cap[2] == 5 and cap[3]==nil)
@@ -133,6 +153,14 @@ assert(a/0 == a)
 assert(cap[0] == "div" and cap[1] == a and cap[2] == 0 and cap[3]==nil)
 assert(a%2 == a)
 assert(cap[0] == "mod" and cap[1] == a and cap[2] == 2 and cap[3]==nil)
+assert(a // (1/0) == a)
+assert(cap[0] == "idiv" and cap[1] == a and cap[2] == 1/0 and cap[3]==nil)
+assert(a & "hi" == a)
+assert(cap[0] == "band" and cap[1] == a and cap[2] == "hi" and cap[3]==nil)
+assert(a | "hi" == a)
+assert(cap[0] == "bor" and cap[1] == a and cap[2] == "hi" and cap[3]==nil)
+assert("hi" ~ a == "hi")
+assert(cap[0] == "bxor" and cap[1] == "hi" and cap[2] == a and cap[3]==nil)
 assert(-a == a)
 assert(cap[0] == "unm" and cap[1] == a)
 assert(a^4 == a)
@@ -145,6 +173,12 @@ assert('4'^a == '4')
 assert(cap[0] == "pow" and cap[1] == '4' and cap[2] == a and cap[3]==nil)
 assert(#a == a)
 assert(cap[0] == "len" and cap[1] == a)
+assert(~a == a)
+assert(cap[0] == "bnot" and cap[1] == a)
+assert(a << 3 == a)
+assert(cap[0] == "shl" and cap[1] == a and cap[2] == 3)
+assert(1.5 >> a == 1.5)
+assert(cap[0] == "shr" and cap[1] == 1.5 and cap[2] == a)
 
 
 -- test for rawlen
@@ -154,6 +188,10 @@ assert(rawlen"abc" == 3)
 assert(not pcall(rawlen, io.stdin))
 assert(not pcall(rawlen, 34))
 assert(not pcall(rawlen))
+
+-- rawlen for long strings
+assert(rawlen(string.rep('a', 1000)) == 1000)
+
 
 t = {}
 t.__lt = function (a,b,c)
@@ -195,10 +233,14 @@ test()  -- retest comparisons, now using both `lt' and `le'
 
 -- test `partial order'
 
-local function Set(x)
+local function rawSet(x)
   local y = {}
   for _,k in pairs(x) do y[k] = 1 end
-  return setmetatable(y, t)
+  return y
+end
+
+local function Set(x)
+  return setmetatable(rawSet(x), t)
 end
 
 t.__lt = function (a,b)
@@ -240,10 +282,36 @@ local s = Set{1,3,5}
 assert(s == Set{3,5,1})
 assert(not rawequal(s, Set{3,5,1}))
 assert(rawequal(s, s))
-assert(Set{1,3,5,1} == Set{3,5,1})
+assert(Set{1,3,5,1} == rawSet{3,5,1})
+assert(rawSet{1,3,5,1} == Set{3,5,1})
 assert(Set{1,3,5} ~= Set{3,5,1,6})
+
+-- '__eq' is not used for table accesses
 t[Set{1,3,5}] = 1
-assert(t[Set{1,3,5}] == nil)   -- `__eq' is not valid for table accesses
+assert(t[Set{1,3,5}] == nil)
+
+
+if not T then
+  (Message or print)('\n >>> testC not active: skipping tests for \z
+userdata equality <<<\n')
+else
+  local u1 = T.newuserdata(0)
+  local u2 = T.newuserdata(0)
+  local u3 = T.newuserdata(0)
+  assert(u1 ~= u2 and u1 ~= u3)
+  debug.setuservalue(u1, 1);
+  debug.setuservalue(u2, 2);
+  debug.setuservalue(u3, 1);
+  debug.setmetatable(u1, {__eq = function (a, b)
+    return debug.getuservalue(a) == debug.getuservalue(b)
+  end})
+  debug.setmetatable(u2, {__eq = function (a, b)
+    return true
+  end})
+  assert(u1 == u3 and u3 == u1 and u1 ~= u2)
+  assert(u2 == u1 and u2 == u3 and u3 == u2)
+  assert(u2 ~= {})   -- different types cannot be equal
+end
 
 
 t.__concat = function (a,b,c)
@@ -333,13 +401,13 @@ assert(a.x == 1 and rawget(a, "x", 3) == 1)
 print '+'
 
 -- testing metatables for basic types
-local debug = require'debug'
-mt = {}
+mt = {__index = function (a,b) return a+b end,
+      __len = function (x) return math.floor(x) end}
 debug.setmetatable(10, mt)
 assert(getmetatable(-2) == mt)
-mt.__index = function (a,b) return a+b end
 assert((10)[3] == 13)
 assert((10)["3"] == 13)
+assert(#3.45 == 3)
 debug.setmetatable(23, nil)
 assert(getmetatable(-2) == nil)
 

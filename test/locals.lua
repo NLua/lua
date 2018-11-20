@@ -1,3 +1,6 @@
+-- $Id: locals.lua,v 1.37 2016/11/07 13:11:28 roberto Exp $
+-- See Copyright Notice in file all.lua
+
 print('testing local variables and environments')
 
 local debug = require"debug"
@@ -79,25 +82,24 @@ assert(c.a == nil)
 f()
 assert(c.a == 3)
 
--- testing limits for special instructions
-
-if not _soft then
-  local a
-  local p = 4
-  for i=2,31 do
+-- old test for limits for special instructions (now just a generic test)
+do
+  local i = 2
+  local p = 4    -- p == 2^i
+  repeat
     for j=-3,3 do
       assert(load(string.format([[local a=%s;
                                         a=a+%s;
-                                        assert(a ==2^%s)]], j, p-j, i))) ()
+                                        assert(a ==2^%s)]], j, p-j, i), '')) ()
       assert(load(string.format([[local a=%s;
                                         a=a-%s;
-                                        assert(a==-2^%s)]], -j, p-j, i))) ()
+                                        assert(a==-2^%s)]], -j, p-j, i), '')) ()
       assert(load(string.format([[local a,b=0,%s;
                                         a=b-%s;
-                                        assert(a==-2^%s)]], -j, p-j, i))) ()
+                                        assert(a==-2^%s)]], -j, p-j, i), '')) ()
     end
-    p =2*p
-  end
+    p = 2 * p;  i = i + 1
+  until p <= 0
 end
 
 print'+'
@@ -124,11 +126,14 @@ end
 
 assert(_ENV == _G)
 
-do local _ENV = (function (...) return ... end)(_G, dummy)
+do
+local dummy
+local _ENV = (function (...) return ... end)(_G, dummy)   -- {
 
 do local _ENV = {assert=assert}; assert(true) end
 mt = {_G = _G}
 local foo,x
+A = false    -- "declare" A
 do local _ENV = mt
   function foo (x)
     A = x
@@ -153,5 +158,5 @@ print('OK')
 
 return 5,f
 
-end
+end   -- }
 

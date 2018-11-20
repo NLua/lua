@@ -1,6 +1,9 @@
+-- $Id: db.lua,v 1.79 2016/11/07 13:02:34 roberto Exp $
+-- See Copyright Notice in file all.lua
+
 -- testing debug library
 
-debug = require "debug"
+local debug = require "debug"
 
 local function dostring(s) return assert(load(s))() end
 
@@ -10,7 +13,10 @@ do
 local a=1
 end
 
-function test (s, l, p)
+assert(not debug.gethook())
+
+local testline = 19         -- line where 'test' is defined
+function test (s, l, p)     -- this must be line 19
   collectgarbage()   -- avoid gc during trace
   local function f (event, line)
     assert(event == 'line')
@@ -25,14 +31,14 @@ end
 
 do
   assert(not pcall(debug.getinfo, print, "X"))   -- invalid option
-  assert(debug.getinfo(1000) == nil)   -- out of range level
-  assert(debug.getinfo(-1) == nil)     -- out of range level
+  assert(not debug.getinfo(1000))   -- out of range level
+  assert(not debug.getinfo(-1))     -- out of range level
   local a = debug.getinfo(print)
   assert(a.what == "C" and a.short_src == "[C]")
   a = debug.getinfo(print, "L")
   assert(a.activelines == nil)
   local b = debug.getinfo(test, "SfL")
-  assert(b.name == nil and b.what == "Lua" and b.linedefined == 13 and
+  assert(b.name == nil and b.what == "Lua" and b.linedefined == testline and
          b.lastlinedefined == b.linedefined + 10 and
          b.func == test and not string.find(b.short_src, "%["))
   assert(b.activelines[b.linedefined + 1] and
@@ -152,7 +158,7 @@ end
 ]], {1,2,1,2,1,2,1,3})
 
 test([[for i,v in pairs{'a','b'} do
-  a=i..v
+  a=tostring(i) .. v
 end
 ]], {1,2,1,2,1,3})
 
@@ -173,12 +179,12 @@ local co = coroutine.create(foo)
 
 assert(debug.getlocal(foo, 1) == 'a')
 assert(debug.getlocal(foo, 2) == 'b')
-assert(debug.getlocal(foo, 3) == nil)
+assert(not debug.getlocal(foo, 3))
 assert(debug.getlocal(co, foo, 1) == 'a')
 assert(debug.getlocal(co, foo, 2) == 'b')
-assert(debug.getlocal(co, foo, 3) == nil)
+assert(not debug.getlocal(co, foo, 3))
 
-assert(debug.getlocal(print, 1) == nil)
+assert(not debug.getlocal(print, 1))
 
 
 -- varargs
@@ -203,13 +209,31 @@ foo()
 foo(print)
 foo(200, 3, 4)
 local a = {}
-for i = 1,1000 do a[i] = i end
+for i = 1, (_soft and 100 or 1000) do a[i] = i end
 foo(table.unpack(a))
 a = nil
 
 -- access to vararg in non-vararg function
 local function foo () return debug.getlocal(1, -1) end
-assert(foo(10) == nil)
+assert(not foo(10))
+
+
+do   -- test hook presence in debug info
+  assert(not debug.gethook())
+  local count = 0
+  local function f ()
+    assert(debug.getinfo(1).namewhat == "hook")
+    local sndline = string.match(debug.traceback(), "\n(.-)\n")
+    assert(string.find(sndline, "hook"))
+    count = count + 1
+  end
+  debug.sethook(f, "l")
+  local a = 0
+  _ENV.a = a
+  a = 1
+  debug.sethook()
+  assert(count == 4)
+end
 
 
 a = {}; L = nil
@@ -241,7 +265,7 @@ function f(a,b)
   assert(debug.setlocal(2, 4, "maçã") == "B")
   x = debug.getinfo(2)
   assert(x.func == g and x.what == "Lua" and x.name == 'g' and
-         x.nups == 1 and string.find(x.source, "^@.*db%.lua$"))
+         x.nups == 2 and string.find(x.source, "^@.*db%.lua$"))
   glob = glob+1
   assert(debug.getinfo(1, "l").currentline == L+1)
   assert(debug.getinfo(1, "l").currentline == L+2)
@@ -309,6 +333,19 @@ assert(debug.gethook() == nil)
 
 -- testing access to function arguments
 
+local function collectlocals (level)
+  local tab = {}
+  for i = 1, math.huge do
+    local n, v = debug.getlocal(level + 1, i)
+    if not (n and string.find(n, "^[a-zA-Z0-9_]+$")) then
+       break   -- consider only real variables
+    end
+    tab[n] = v
+  end
+  return tab
+end
+
+
 X = nil
 a = {}
 function a:f (a, b, ...) local arg = {...}; local c = 13 end
@@ -324,14 +361,7 @@ debug.sethook(function (e)
     assert(m == 'l' and c == 0)
     debug.sethook(nil)  -- hook is called only once
     assert(not X)       -- check that
-    X = {}; local i = 1
-    local x,y
-    while 1 do
-      x,y = debug.getlocal(2, i)
-      if x==nil then break end
-      X[x] = y
-      i = i+1
-    end
+    X = collectlocals(2)
   end, "l")
 end, "c")
 
@@ -340,6 +370,30 @@ assert(X.self == a and X.a == 1   and X.b == 2 and X.c == nil)
 assert(XX == 12)
 assert(debug.gethook() == nil)
 
+
+-- testing access to local variables in return hook (bug in 5.2)
+do
+  local function foo (a, b)
+    do local x,y,z end
+    local c, d = 10, 20
+    return
+  end
+
+  local function aux ()
+    if debug.getinfo(2).name == "foo" then
+      foo = nil   -- to signal that it found 'foo'
+      local tab = {a = 100, b = 200, c = 10, d = 20}
+      for n, v in pairs(collectlocals(2)) do
+        assert(tab[n] == v)
+        tab[n] = nil
+      end
+      assert(next(tab) == nil)    -- 'tab' must be empty
+    end
+  end
+
+  debug.sethook(aux, "r"); foo(100, 200); debug.sethook()
+  assert(foo == nil)
+end
 
 -- testing upvalue access
 local function getupvalues (f)
@@ -358,9 +412,9 @@ end
 local a,b,c = 1,2,3
 local function foo1 (a) b = a; return c end
 local function foo2 (x) a = x; return c+b end
-assert(debug.getupvalue(foo1, 3) == nil)
-assert(debug.getupvalue(foo1, 0) == nil)
-assert(debug.setupvalue(foo1, 3, "xuxu") == nil)
+assert(not debug.getupvalue(foo1, 3))
+assert(not debug.getupvalue(foo1, 0))
+assert(not debug.setupvalue(foo1, 3, "xuxu"))
 local t = getupvalues(foo1)
 assert(t.a == nil and t.b == 2 and t.c == 3)
 t = getupvalues(foo2)
@@ -382,7 +436,7 @@ assert(m == "" and c == 4)
 debug.sethook(function (e) a=a+1 end, "", 4000)
 a=0; for i=1,1000 do end; assert(a == 0)
 
-if not _no32 then
+do
   debug.sethook(print, "", 2^24 - 1)   -- count upperbound
   local f,m,c = debug.gethook()
   assert(({debug.gethook()})[3] == 2^24 - 1)
@@ -435,8 +489,7 @@ h(false)
 debug.sethook()
 assert(b == 2)   -- two tail calls
 
-lim = 30000
-if _soft then limit = 3000 end
+lim = _soft and 3000 or 30000
 local function foo (x)
   if x==0 then
     assert(debug.getinfo(2).what == "main")
@@ -477,9 +530,14 @@ assert(debug.traceback(print) == print)
 assert(debug.traceback(print, 4) == print)
 assert(string.find(debug.traceback("hi", 4), "^hi\n"))
 assert(string.find(debug.traceback("hi"), "^hi\n"))
-assert(not string.find(debug.traceback("hi"), "'traceback'"))
-assert(string.find(debug.traceback("hi", 0), "'traceback'"))
+assert(not string.find(debug.traceback("hi"), "'debug.traceback'"))
+assert(string.find(debug.traceback("hi", 0), "'debug.traceback'"))
 assert(string.find(debug.traceback(), "^stack traceback:\n"))
+
+do  -- C-function names in traceback
+  local st, msg = (function () return pcall end)()(debug.traceback)
+  assert(st == true and string.find(msg, "pcall"))
+end
 
 
 -- testing nparams, nups e isvararg
@@ -495,6 +553,8 @@ assert(t.isvararg == true and t.nparams == 2 and t.nups == 1)
 t = debug.getinfo(1)   -- main
 assert(t.isvararg == true and t.nparams == 0 and t.nups == 1 and
        debug.getupvalue(t.func, 1) == "_ENV")
+
+
 
 
 -- testing debugging of coroutines
@@ -544,7 +604,7 @@ for i=x.linedefined + 1, x.lastlinedefined do
   x.activelines[i] = nil
 end
 assert(next(x.activelines) == nil)   -- no 'extra' elements
-assert(debug.getinfo(co, 2) == nil)
+assert(not debug.getinfo(co, 2))
 local a,b = debug.getlocal(co, 1, 1)
 assert(a == "x" and b == 10)
 a,b = debug.getlocal(co, 1, 2)
@@ -562,8 +622,25 @@ a,b = coroutine.resume(co)
 assert(a and b == "hi")
 assert(#tr == 4 and tr[4] == l.currentline+2)
 assert(debug.gethook(co) == foo)
-assert(debug.gethook() == nil)
+assert(not debug.gethook())
 checktraceback(co, {})
+
+
+-- check get/setlocal in coroutines
+co = coroutine.create(function (x)
+  local a, b = coroutine.yield(x)
+  assert(a == 100 and b == nil)
+  return x
+end)
+a, b = coroutine.resume(co, 10)
+assert(a and b == 10)
+a, b = debug.getlocal(co, 1, 1)
+assert(a == "x" and b == 10)
+assert(not debug.getlocal(co, 1, 5))
+assert(debug.setlocal(co, 1, 1, 30) == "x")
+assert(not debug.setlocal(co, 1, 5, 40))
+a, b = coroutine.resume(co, 100)
+assert(a and b == 30)
 
 
 -- check traceback of suspended (or dead with error) coroutines
@@ -572,7 +649,7 @@ function f(i) if i==0 then error(i) else coroutine.yield(); f(i-1) end end
 
 co = coroutine.create(function (x) f(x) end)
 a, b = coroutine.resume(co, 3)
-t = {"'yield'", "'f'", "in function <"}
+t = {"'coroutine.yield'", "'f'", "in function <"}
 while coroutine.status(co) == "suspended" do
   checktraceback(co, t)
   a, b = coroutine.resume(co)
@@ -615,17 +692,166 @@ local function f (t)
 end
 setmetatable(a, {
   __index = f; __add = f; __div = f; __mod = f; __concat = f; __pow = f;
-  __eq = f; __le = f; __lt = f;
+  __mul = f; __idiv = f; __unm = f; __len = f; __sub = f;
+  __shl = f; __shr = f; __bor = f; __bxor = f;
+  __eq = f; __le = f; __lt = f; __unm = f; __len = f; __band = f;
+  __bnot = f;
 })
 
 local b = setmetatable({}, getmetatable(a))
 
 assert(a[3] == "__index" and a^3 == "__pow" and a..a == "__concat")
 assert(a/3 == "__div" and 3%a == "__mod")
+assert(a+3 == "__add" and 3-a == "__sub" and a*3 == "__mul" and
+       -a == "__unm" and #a == "__len" and a&3 == "__band")
+assert(a|3 == "__bor" and 3~a == "__bxor" and a<<3 == "__shl" and
+       a>>1 == "__shr")
 assert (a==b and a.op == "__eq")
 assert (a>=b and a.op == "__le")
 assert (a>b and a.op == "__lt")
+assert(~a == "__bnot")
 
+do   -- testing for-iterator name
+  local function f()
+    assert(debug.getinfo(1).name == "for iterator")
+  end
+
+  for i in f do end
+end
+
+
+do   -- testing debug info for finalizers
+  local name = nil
+
+  -- create a piece of garbage with a finalizer
+  setmetatable({}, {__gc = function ()
+    local t = debug.getinfo(2)   -- get callee information
+    assert(t.namewhat == "metamethod")
+    name = t.name
+  end})
+
+  -- repeat until previous finalizer runs (setting 'name')
+  repeat local a = {} until name
+  assert(name == "__gc")
+end
+
+
+do
+  print("testing traceback sizes")
+
+  local function countlines (s)
+    return select(2, string.gsub(s, "\n", ""))
+  end
+
+  local function deep (lvl, n)
+    if lvl == 0 then
+      return (debug.traceback("message", n))
+    else
+      return (deep(lvl-1, n))
+    end
+  end
+
+  local function checkdeep (total, start)
+    local s = deep(total, start)
+    local rest = string.match(s, "^message\nstack traceback:\n(.*)$")
+    local cl = countlines(rest)
+    -- at most 10 lines in first part, 11 in second, plus '...'
+    assert(cl <= 10 + 11 + 1)
+    local brk = string.find(rest, "%.%.%.")
+    if brk then   -- does message have '...'?
+      local rest1 = string.sub(rest, 1, brk)
+      local rest2 = string.sub(rest, brk, #rest)
+      assert(countlines(rest1) == 10 and countlines(rest2) == 11)
+    else
+      assert(cl == total - start + 2)
+    end
+  end
+
+  for d = 1, 51, 10 do
+    for l = 1, d do
+      -- use coroutines to ensure complete control of the stack
+      coroutine.wrap(checkdeep)(d, l)
+    end
+  end
+
+end
+
+
+print("testing debug functions on chunk without debug info")
+prog = [[-- program to be loaded without debug information
+local debug = require'debug'
+local a = 12  -- a local variable
+
+local n, v = debug.getlocal(1, 1)
+assert(n == "(*temporary)" and v == debug)   -- unkown name but known value
+n, v = debug.getlocal(1, 2)
+assert(n == "(*temporary)" and v == 12)   -- unkown name but known value
+
+-- a function with an upvalue
+local f = function () local x; return a end
+n, v = debug.getupvalue(f, 1)
+assert(n == "(*no name)" and v == 12)
+assert(debug.setupvalue(f, 1, 13) == "(*no name)")
+assert(a == 13)
+
+local t = debug.getinfo(f)
+assert(t.name == nil and t.linedefined > 0 and
+       t.lastlinedefined == t.linedefined and
+       t.short_src == "?")
+assert(debug.getinfo(1).currentline == -1)
+
+t = debug.getinfo(f, "L").activelines
+assert(next(t) == nil)    -- active lines are empty
+
+-- dump/load a function without debug info
+f = load(string.dump(f))
+
+t = debug.getinfo(f)
+assert(t.name == nil and t.linedefined > 0 and
+       t.lastlinedefined == t.linedefined and
+       t.short_src == "?")
+assert(debug.getinfo(1).currentline == -1)
+
+return a
+]]
+
+
+-- load 'prog' without debug info
+local f = assert(load(string.dump(load(prog), true)))
+
+assert(f() == 13)
+
+do   -- tests for 'source' in binary dumps
+  local prog = [[
+    return function (x)
+      return function (y) 
+        return x + y
+      end
+    end
+  ]]
+  local name = string.rep("x", 1000)
+  local p = assert(load(prog, name))
+  -- load 'p' as a binary chunk with debug information
+  local c = string.dump(p)
+  assert(#c > 1000 and #c < 2000)   -- no repetition of 'source' in dump
+  local f = assert(load(c))
+  local g = f()
+  local h = g(3)
+  assert(h(5) == 8)
+  assert(debug.getinfo(f).source == name and   -- all functions have 'source'
+         debug.getinfo(g).source == name and 
+         debug.getinfo(h).source == name)
+  -- again, without debug info
+  local c = string.dump(p, true)
+  assert(#c < 500)   -- no 'source' in dump
+  local f = assert(load(c))
+  local g = f()
+  local h = g(30)
+  assert(h(50) == 80)
+  assert(debug.getinfo(f).source == '=?' and   -- no function has 'source'
+         debug.getinfo(g).source == '=?' and 
+         debug.getinfo(h).source == '=?')
+end
 
 print"OK"
 

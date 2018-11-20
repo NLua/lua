@@ -1,7 +1,5 @@
--- The tests for 'require' assume some specific directories and libraries;
--- better to avoid them in generic machines
-
-if not _port then --[
+-- $Id: attrib.lua,v 1.65 2016/11/07 13:11:28 roberto Exp $
+-- See Copyright Notice in file all.lua
 
 print "testing require"
 
@@ -23,7 +21,7 @@ print("package config: "..string.gsub(package.config, "\n", "|"))
 do
   -- create a path with 'max' templates,
   -- each with 1-10 repetitions of '?'
-  local max = 2000
+  local max = _soft and 100 or 2000
   local t = {}
   for i = 1,max do t[i] = string.rep("?", i%10 + 1) end
   t[#t + 1] = ";"    -- empty template
@@ -51,11 +49,28 @@ end
 
 print('+')
 
--- auxiliary directory with C modules and temporary files
-local DIR = "libs/"
 
--- prepend DIR to a name
-local function D (x) return DIR .. x end
+-- The next tests for 'require' assume some specific directories and
+-- libraries.
+
+if not _port then --[
+
+local dirsep = string.match(package.config, "^([^\n]+)\n")
+
+-- auxiliary directory with C modules and temporary files
+local DIR = "libs" .. dirsep
+
+-- prepend DIR to a name and correct directory separators
+local function D (x)
+  x = string.gsub(x, "/", dirsep)
+  return DIR .. x
+end
+
+-- prepend DIR and pospend proper C lib. extension to a name
+local function DC (x)
+  local ext = (dirsep == '\\') and ".dll" or ".so"
+  return D(x .. ext)
+end
 
 
 local function createfiles (files, preextras, posextras)
@@ -77,13 +92,14 @@ end
 local files = {
   ["names.lua"] = "do return {...} end\n",
   ["err.lua"] = "B = 15; a = a + 1;",
+  ["synerr.lua"] = "B =",
   ["A.lua"] = "",
   ["B.lua"] = "assert(...=='B');require 'A'",
   ["A.lc"] = "",
   ["A"] = "",
   ["L"] = "",
   ["XXxX"] = "",
-  ["C.lua"] = "package.loaded[...] = 25; require'C'"
+  ["C.lua"] = "package.loaded[...] = 25; require'C'",
 }
 
 AA = nil
@@ -99,7 +115,7 @@ assert(package.searchpath("C.lua", D"?", "", "") == D"C.lua")
 assert(package.searchpath("C.lua", D"?", ".", ".") == D"C.lua")
 assert(package.searchpath("--x-", D"?", "-", "X") == D"XXxX")
 assert(package.searchpath("---xX", D"?", "---", "XX") == D"XXxX")
-assert(package.searchpath(D"C.lua", "?", "/") == D"C.lua")
+assert(package.searchpath(D"C.lua", "?", dirsep) == D"C.lua")
 assert(package.searchpath(".\\C.lua", D"?", "\\") == D"./C.lua")
 
 local oldpath = package.path
@@ -118,8 +134,10 @@ a = require"names"
 assert(a[1] == "names" and a[2] == D"names.lua")
 
 _G.a = nil
-assert(not pcall(require, "err"))
-assert(B == 15)
+local st, msg = pcall(require, "err")
+assert(not st and string.find(msg, "arithmetic") and B == 15)
+st, msg = pcall(require, "synerr")
+assert(not st and string.find(msg, "error loading module"))
 
 assert(package.searchpath("C", package.path) == D"C.lua")
 assert(require"C" == 25)
@@ -196,6 +214,13 @@ for t in string.gmatch(package.path..";"..package.cpath, "[^;]+") do
   assert(string.find(err, t, 1, true))
 end
 
+do  -- testing 'package.searchers' not being a table
+  local searchers = package.searchers
+  package.searchers = 3
+  local st, msg = pcall(require, 'a')
+  assert(not st and string.find(msg, "must be a table"))
+  package.searchers = searchers
+end
 
 local function import(...)
   local f = {...}
@@ -215,42 +240,42 @@ assert(not pcall(module, 'XUXU'))
 local p = ""   -- On Mac OS X, redefine this to "_"
 
 -- check whether loadlib works in this system
-local st, err, when = package.loadlib(D"lib1.so", "*")
+local st, err, when = package.loadlib(DC"lib1", "*")
 if not st then
   local f, err, when = package.loadlib("donotexist", p.."xuxu")
   assert(not f and type(err) == "string" and when == "absent")
-  ;(Message or print)('\a\n >>> cannot load dynamic library <<<\n\a')
+  ;(Message or print)('\n >>> cannot load dynamic library <<<\n')
   print(err, when)
 else
   -- tests for loadlib
-  local f = assert(package.loadlib(D"lib1.so", p.."onefunction"))
+  local f = assert(package.loadlib(DC"lib1", p.."onefunction"))
   local a, b = f(15, 25)
   assert(a == 25 and b == 15)
 
-  f = assert(package.loadlib(D"lib1.so", p.."anotherfunc"))
-  assert(f(10, 20) == "1020\n")
+  f = assert(package.loadlib(DC"lib1", p.."anotherfunc"))
+  assert(f(10, 20) == "10%20\n")
 
   -- check error messages
-  local f, err, when = package.loadlib(D"lib1.so", p.."xuxu")
+  local f, err, when = package.loadlib(DC"lib1", p.."xuxu")
   assert(not f and type(err) == "string" and when == "init")
   f, err, when = package.loadlib("donotexist", p.."xuxu")
   assert(not f and type(err) == "string" and when == "open")
 
   -- symbols from 'lib1' must be visible to other libraries
-  f = assert(package.loadlib(D"lib11.so", p.."luaopen_lib11"))
+  f = assert(package.loadlib(DC"lib11", p.."luaopen_lib11"))
   assert(f() == "exported")
 
   -- test C modules with prefixes in names
-  package.cpath = D"?.so"
-  local lib2 = require"v-lib2"
+  package.cpath = DC"?"
+  local lib2 = require"lib2-v2"
   -- check correct access to global environment and correct
   -- parameters
-  assert(_ENV.x == "v-lib2" and _ENV.y == D"v-lib2.so")
+  assert(_ENV.x == "lib2-v2" and _ENV.y == DC"lib2-v2")
   assert(lib2.id("x") == "x")
 
   -- test C submodules
   local fs = require"lib1.sub"
-  assert(_ENV.x == "lib1.sub" and _ENV.y == D"lib1.so")
+  assert(_ENV.x == "lib1.sub" and _ENV.y == DC"lib1")
   assert(fs.id(45) == 45)
 end
 
@@ -336,6 +361,10 @@ assert(not not a == true)
 assert(not not (6 or nil) == true)
 assert(not not (nil and 56) == false)
 assert(not not (nil and true) == false)
+assert(not 10 == false)
+assert(not {} == false)
+assert(not 0.5 == false)
+assert(not "x" == false)
 
 assert({} ~= {})
 print('+')
@@ -348,7 +377,7 @@ assert(a[1<2] == 20 and a[1>2] == 10)
 function f(a) return a end
 
 local a = {}
-for i=3000,-3000,-1 do a[i] = i; end
+for i=3000,-3000,-1 do a[i + 0.0] = i; end
 a[10e30] = "alo"; a[true] = 10; a[false] = 20
 assert(a[10e30] == 'alo' and a[not 1] == 20 and a[10<20] == 10)
 for i=3000,-3000,-1 do assert(a[i] == i); end
@@ -357,7 +386,8 @@ a[f] = print
 a[a] = a
 assert(a[a][a][a][a][print] == assert)
 a[print](a[a[f]] == a[print])
-assert(not pcall(function () a[nil] = 10 end))
+assert(not pcall(function () local a = {}; a[nil] = 10 end))
+assert(not pcall(function () local a = {[nil] = 10} end))
 assert(a[nil] == nil)
 a = nil
 
@@ -367,12 +397,32 @@ assert(a[1]==10 and a[-3]==a.a and a[f]==print and a.x=='a' and not a.y)
 a[1], f(a)[2], b, c = {['alo']=assert}, 10, a[1], a[f], 6, 10, 23, f(a), 2
 a[1].alo(a[2]==10 and b==10 and c==print)
 
-a[2^31] = 10; a[2^31+1] = 11; a[-2^31] = 12;
-a[2^32] = 13; a[-2^32] = 14; a[2^32+1] = 15; a[10^33] = 16;
 
-assert(a[2^31] == 10 and a[2^31+1] == 11 and a[-2^31] == 12 and
-       a[2^32] == 13 and a[-2^32] == 14 and a[2^32+1] == 15 and
-       a[10^33] == 16)
+-- test of large float/integer indices 
+
+-- compute maximum integer where all bits fit in a float
+local maxint = math.maxinteger
+
+while maxint - 1.0 == maxint - 0.0 do   -- trim (if needed) to fit in a float
+  maxint = maxint // 2
+end
+
+maxintF = maxint + 0.0   -- float version
+
+assert(math.type(maxintF) == "float" and maxintF >= 2.0^14)
+
+-- floats and integers must index the same places
+a[maxintF] = 10; a[maxintF - 1.0] = 11;
+a[-maxintF] = 12; a[-maxintF + 1.0] = 13;
+
+assert(a[maxint] == 10 and a[maxint - 1] == 11 and
+       a[-maxint] == 12 and a[-maxint + 1] == 13)
+
+a[maxint] = 20
+a[-maxint] = 22
+
+assert(a[maxintF] == 20 and a[maxintF - 1.0] == 11 and
+       a[-maxintF] == 22 and a[-maxintF + 1.0] == 13)
 
 a = nil
 

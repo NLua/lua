@@ -1,6 +1,7 @@
-print('testing vararg')
+-- $Id: vararg.lua,v 1.25 2016/11/07 13:11:28 roberto Exp $
+-- See Copyright Notice in file all.lua
 
-_G.arg = nil
+print('testing vararg')
 
 function f(a, ...)
   local arg = {n = select('#', ...), ...}
@@ -9,7 +10,7 @@ function f(a, ...)
 end
 
 function c12 (...)
-  assert(arg == nil)
+  assert(arg == _G.arg)    -- no local 'arg'
   local x = {...}; x.n = #x
   local res = (x.n==2 and x[1] == 1 and x[2] == 2)
   if res then res = 55 end
@@ -76,7 +77,7 @@ function oneless (a, ...) return ... end
 
 function f (n, a, ...)
   local b
-  assert(arg == nil)
+  assert(arg == _G.arg)   -- no local 'arg'
   if n == 0 then
     local b, c, d = ...
     return a, b, c, d, oneless(oneless(oneless(...)))
@@ -120,6 +121,22 @@ a = {select(-2, 3, 5, 7)}
 assert(a[1] == 5 and a[2] == 7 and a[3] == nil)
 pcall(select, 10000)
 pcall(select, -10000)
+
+
+-- bug in 5.2.2
+
+function f(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10,
+p11, p12, p13, p14, p15, p16, p17, p18, p19, p20,
+p21, p22, p23, p24, p25, p26, p27, p28, p29, p30,
+p31, p32, p33, p34, p35, p36, p37, p38, p39, p40,
+p41, p42, p43, p44, p45, p46, p48, p49, p50, ...)
+  local a1,a2,a3,a4,a5,a6,a7
+  local a8,a9,a10,a11,a12,a13,a14
+end
+
+-- assertion fail here
+f()
+
 
 print('OK')
 
