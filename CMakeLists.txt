@@ -6,7 +6,7 @@
 
 # Changed by Vinicius Jarina (viniciusjarina@gmail.com)
 
-PROJECT ( lua CXX )
+PROJECT ( lua C )
 CMAKE_MINIMUM_REQUIRED ( VERSION 2.8.7 )
 
 IF (CMAKE_SIZEOF_VOID_P EQUAL 8)
@@ -29,7 +29,7 @@ SET(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib${LIB_SUFFIX}")
 SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin${LIB_SUFFIX}")
 SET(EXECUTABLE_OUTPUT_PATH         "${CMAKE_BINARY_DIR}/bin${LIB_SUFFIX}")
 
-SET (LIB_LUA_VER "52" CACHE STRING "Suffix of version (for library name) e.g lua52")
+SET (LIB_LUA_VER "53" CACHE STRING "Suffix of version (for library name) e.g lua53")
 
 #
 # Include dir COPY
@@ -79,43 +79,43 @@ ENDIF ()
 # Sources and headers
 INCLUDE_DIRECTORIES ( include )
 SET (   SRC_LIB 
-		src/lapi.cpp
-		src/lauxlib.cpp
-		src/lbaselib.cpp
-		src/lbitlib.cpp
-		src/lcode.cpp
-		src/lcorolib.cpp
-		src/lctype.cpp
-		src/ldblib.cpp
-		src/ldebug.cpp
-		src/ldo.cpp
-		src/ldump.cpp
-		src/lfunc.cpp
-		src/lgc.cpp
-		src/linit.cpp
-		src/liolib.cpp
-		src/llex.cpp
-		src/lmathlib.cpp
-		src/lmem.cpp
-		src/lnet.cpp
-		src/loadlib.cpp
-		src/lobject.cpp
-		src/lopcodes.cpp
-		src/loslib.cpp
-		src/lparser.cpp
-		src/lstate.cpp
-		src/lstring.cpp
-		src/lstrlib.cpp
-		src/ltable.cpp
-		src/ltablib.cpp
-		src/ltm.cpp
-		src/lundump.cpp
-		src/lvm.cpp
-		src/lzio.cpp
+		src/lapi.c
+		src/lauxlib.c
+		src/lbaselib.c
+		src/lbitlib.c
+		src/lcode.c
+		src/lcorolib.c
+		src/lctype.c
+		src/ldblib.c
+		src/ldebug.c
+		src/ldo.c
+		src/ldump.c
+		src/lfunc.c
+		src/lgc.c
+		src/linit.c
+		src/liolib.c
+		src/llex.c
+		src/lmathlib.c
+		src/lmem.c
+		src/loadlib.c
+		src/lobject.c
+		src/lopcodes.c
+		src/loslib.c
+		src/lparser.c
+		src/lstate.c
+		src/lstring.c
+		src/lstrlib.c
+		src/ltable.c
+		src/ltablib.c
+		src/ltm.c
+		src/lundump.c
+		src/lutf8lib.c
+		src/lvm.c
+		src/lzio.c
 		)
 		
-SET ( SRC_LUA  src/lua.cpp )
-SET ( SRC_LUAC src/luac.cpp )
+SET ( SRC_LUA  src/lua.c )
+SET ( SRC_LUAC src/luac.c )
 
 ## BUILD
 # Create dynamic library (dll, so)
