@@ -1,6 +1,6 @@
 1 VERSIONINFO
- FILEVERSION 5,2,4,0
- PRODUCTVERSION 5,2,4,0
+ FILEVERSION 5,3,5,0
+ PRODUCTVERSION 5,3,5,0
 BEGIN
     BLOCK "StringFileInfo"
     BEGIN
@@ -9,18 +9,13 @@ BEGIN
             VALUE "Comments", "www.lua.org\0"
             VALUE "CompanyName", "Lua.org\0"
             VALUE "FileDescription", "Lua Language Run Time\0"
-            VALUE "FileVersion", "5.2.4\0"
-            VALUE "LegalCopyright", "Copyright © 1994-2015 Lua.org, PUC-Rio.\0"
-            VALUE "OriginalFilename", "lua52.dll\0"
+            VALUE "FileVersion", "5.3.5\0"
+            VALUE "LegalCopyright", "Copyright ï¿½ 1994-2018 Lua.org, PUC-Rio.\0"
+            VALUE "OriginalFilename", "lua53.dll\0"
             VALUE "ProductName", "Lua - The Programming Language\0"
-            VALUE "ProductVersion", "5.2.4\0"
+            VALUE "ProductVersion", "5.3.5\0"
             VALUE "PrivateBuild", "Built for NLua\0"
         END
     END
 END
 
-#ifdef MSVC8
-2 24 "lua_dll8.manifest"
-#elif MSVC9
-2 24 "lua_dll9.manifest"
-#endif
