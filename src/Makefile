@@ -6,8 +6,8 @@
 # Your platform. See PLATS for possible values.
 PLAT= none
 
-CC= gcc
-CFLAGS= -O2 -Wall -DLUA_COMPAT_ALL $(SYSCFLAGS) $(MYCFLAGS)
+CC= gcc -std=gnu99
+CFLAGS= -O2 -Wall -Wextra -DLUA_COMPAT_5_2 $(SYSCFLAGS) $(MYCFLAGS)
 LDFLAGS= $(SYSLDFLAGS) $(MYLDFLAGS)
 LIBS= -lm $(SYSLIBS) $(MYLIBS)
 
@@ -26,14 +26,14 @@ MYOBJS=
 
 # == END OF USER SETTINGS -- NO NEED TO CHANGE ANYTHING BELOW THIS LINE =======
 
-PLATS= aix ansi bsd freebsd generic linux macosx mingw posix solaris
+PLATS= aix bsd c89 freebsd generic linux macosx mingw posix solaris
 
 LUA_A=	liblua.a
 CORE_O=	lapi.o lcode.o lctype.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o \
 	lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o \
 	ltm.o lundump.o lvm.o lzio.o
 LIB_O=	lauxlib.o lbaselib.o lbitlib.o lcorolib.o ldblib.o liolib.o \
-	lmathlib.o loslib.o lstrlib.o ltablib.o loadlib.o linit.o
+	lmathlib.o loslib.o lstrlib.o ltablib.o lutf8lib.o loadlib.o linit.o
 BASE_O= $(CORE_O) $(LIB_O) $(MYOBJS)
 
 LUA_T=	lua
@@ -60,16 +60,16 @@ $(LUA_A): $(BASE_O)
 	$(RANLIB) $@
 
 $(LUA_T): $(LUA_O) $(LUA_A)
-	$(CC) -o  x -I../include $@ $(LDFLAGS) $(LUA_O) $(LUA_A) $(LIBS)
+	$(CC) -o $@ $(LDFLAGS) $(LUA_O) $(LUA_A) $(LIBS)
 
 $(LUAC_T): $(LUAC_O) $(LUA_A)
-	$(CC) -o -I../include $@ $(LDFLAGS) $(LUAC_O) $(LUA_A) $(LIBS)
+	$(CC) -o $@ $(LDFLAGS) $(LUAC_O) $(LUA_A) $(LIBS)
 
 clean:
 	$(RM) $(ALL_T) $(ALL_O)
 
 depend:
-	@$(CC) $(CFLAGS) -MM l*.cpp
+	@$(CC) $(CFLAGS) -MM l*.c
 
 echo:
 	@echo "PLAT= $(PLAT)"
@@ -91,14 +91,18 @@ none:
 aix:
 	$(MAKE) $(ALL) CC="xlc" CFLAGS="-O2 -DLUA_USE_POSIX -DLUA_USE_DLOPEN" SYSLIBS="-ldl" SYSLDFLAGS="-brtl -bexpall"
 
-ansi:
-	$(MAKE) $(ALL) SYSCFLAGS="-DLUA_ANSI"
-
 bsd:
 	$(MAKE) $(ALL) SYSCFLAGS="-DLUA_USE_POSIX -DLUA_USE_DLOPEN" SYSLIBS="-Wl,-E"
 
+c89:
+	$(MAKE) $(ALL) SYSCFLAGS="-DLUA_USE_C89" CC="gcc -std=c89"
+	@echo ''
+	@echo '*** C89 does not guarantee 64-bit integers for Lua.'
+	@echo ''
+
+
 freebsd:
-	$(MAKE) $(ALL) SYSCFLAGS="-DLUA_USE_LINUX" SYSLIBS="-Wl,-E -lreadline"
+	$(MAKE) $(ALL) SYSCFLAGS="-DLUA_USE_LINUX -I/usr/include/edit" SYSLIBS="-Wl,-E -ledit" CC="cc"
 
 generic: $(ALL)
 
@@ -106,10 +110,10 @@ linux:
 	$(MAKE) $(ALL) SYSCFLAGS="-DLUA_USE_LINUX" SYSLIBS="-Wl,-E -ldl -lreadline"
 
 macosx:
-	$(MAKE) $(ALL) SYSCFLAGS="-DLUA_USE_MACOSX" SYSLIBS="-lreadline" CC=cc
+	$(MAKE) $(ALL) SYSCFLAGS="-DLUA_USE_MACOSX" SYSLIBS="-lreadline"
 
 mingw:
-	$(MAKE) "LUA_A=lua52.dll" "LUA_T=lua.exe" \
+	$(MAKE) "LUA_A=lua53.dll" "LUA_T=lua.exe" \
 	"AR=$(CC) -shared -o" "RANLIB=strip --strip-unneeded" \
 	"SYSCFLAGS=-DLUA_BUILD_AS_DLL" "SYSLIBS=" "SYSLDFLAGS=-s" lua.exe
 	$(MAKE) "LUAC_T=luac.exe" luac.exe
@@ -118,69 +122,76 @@ posix:
 	$(MAKE) $(ALL) SYSCFLAGS="-DLUA_USE_POSIX"
 
 solaris:
-	$(MAKE) $(ALL) SYSCFLAGS="-DLUA_USE_POSIX -DLUA_USE_DLOPEN" SYSLIBS="-ldl"
+	$(MAKE) $(ALL) SYSCFLAGS="-DLUA_USE_POSIX -DLUA_USE_DLOPEN -D_REENTRANT" SYSLIBS="-ldl"
 
 # list targets that do not create files (but not all makes understand .PHONY)
 .PHONY: all $(PLATS) default o a clean depend echo none
 
 # DO NOT DELETE
 
-lapi.o: lapi.cpp ../include/lua.h ../include/luaconf.h ../include/lapi.h ../include/llimits.h ../include/lstate.h ../include/lobject.h ../include/ltm.h \
- ../include/lzio.h ../include/lmem.h ../include/ldebug.h ../include/ldo.h ../include/lfunc.h ../include/lgc.h ../include/lstring.h ../include/ltable.h ../include/lundump.h \
+lapi.o: lapi.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lapi.h ../include/llimits.h ../include/lstate.h \
+ ../include/lobject.h ../include/ltm.h ../include/lzio.h ../include/lmem.h ../include/ldebug.h ../include/ldo.h ../include/lfunc.h ../include/lgc.h ../include/lstring.h \
+ ../include/ltable.h ../include/lundump.h ../include/lvm.h
+lauxlib.o: lauxlib.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lauxlib.h
+lbaselib.o: lbaselib.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lauxlib.h lualib.h
+lbitlib.o: lbitlib.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lauxlib.h lualib.h
+lcode.o: lcode.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lcode.h ../include/llex.h ../include/lobject.h \
+ ../include/llimits.h ../include/lzio.h ../include/lmem.h ../include/lopcodes.h ../include/lparser.h ../include/ldebug.h ../include/lstate.h ../include/ltm.h \
+ ../include/ldo.h ../include/lgc.h ../include/lstring.h ../include/ltable.h ../include/lvm.h
+lcorolib.o: lcorolib.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lauxlib.h lualib.h
+lctype.o: lctype.c ../include/lprefix.h ../include/lctype.h ../include/lua.h ../include/luaconf.h ../include/llimits.h
+ldblib.o: ldblib.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lauxlib.h lualib.h
+ldebug.o: ldebug.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lapi.h ../include/llimits.h ../include/lstate.h \
+ ../include/lobject.h ../include/ltm.h ../include/lzio.h ../include/lmem.h ../include/lcode.h ../include/llex.h ../include/lopcodes.h ../include/lparser.h \
+ ../include/ldebug.h ../include/ldo.h ../include/lfunc.h ../include/lstring.h ../include/lgc.h ../include/ltable.h ../include/lvm.h
+ldo.o: ldo.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lapi.h ../include/llimits.h ../include/lstate.h \
+ ../include/lobject.h ../include/ltm.h ../include/lzio.h ../include/lmem.h ../include/ldebug.h ../include/ldo.h ../include/lfunc.h ../include/lgc.h ../include/lopcodes.h \
+ ../include/lparser.h ../include/lstring.h ../include/ltable.h ../include/lundump.h ../include/lvm.h
+ldump.o: ldump.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lobject.h ../include/llimits.h ../include/lstate.h \
+ ../include/ltm.h ../include/lzio.h ../include/lmem.h ../include/lundump.h
+lfunc.o: lfunc.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lfunc.h ../include/lobject.h ../include/llimits.h \
+ ../include/lgc.h ../include/lstate.h ../include/ltm.h ../include/lzio.h ../include/lmem.h
+lgc.o: lgc.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/ldebug.h ../include/lstate.h ../include/lobject.h \
+ ../include/llimits.h ../include/ltm.h ../include/lzio.h ../include/lmem.h ../include/ldo.h ../include/lfunc.h ../include/lgc.h ../include/lstring.h ../include/ltable.h
+linit.o: linit.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h lualib.h ../include/lauxlib.h
+liolib.o: liolib.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lauxlib.h lualib.h
+llex.o: llex.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lctype.h ../include/llimits.h ../include/ldebug.h \
+ ../include/lstate.h ../include/lobject.h ../include/ltm.h ../include/lzio.h ../include/lmem.h ../include/ldo.h ../include/lgc.h ../include/llex.h ../include/lparser.h \
+ ../include/lstring.h ../include/ltable.h
+lmathlib.o: lmathlib.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lauxlib.h lualib.h
+lmem.o: lmem.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/ldebug.h ../include/lstate.h ../include/lobject.h \
+ ../include/llimits.h ../include/ltm.h ../include/lzio.h ../include/lmem.h ../include/ldo.h ../include/lgc.h
+loadlib.o: loadlib.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lauxlib.h lualib.h
+lobject.o: lobject.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lctype.h ../include/llimits.h \
+ ../include/ldebug.h ../include/lstate.h ../include/lobject.h ../include/ltm.h ../include/lzio.h ../include/lmem.h ../include/ldo.h ../include/lstring.h ../include/lgc.h \
  ../include/lvm.h
-lauxlib.o: lauxlib.cpp ../include/lua.h ../include/luaconf.h ../include/lauxlib.h
-lbaselib.o: lbaselib.cpp ../include/lua.h ../include/luaconf.h ../include/lauxlib.h ../include/lualib.h
-lbitlib.o: lbitlib.cpp ../include/lua.h ../include/luaconf.h ../include/lauxlib.h ../include/lualib.h
-lcode.o: lcode.cpp ../include/lua.h ../include/luaconf.h ../include/lcode.h ../include/llex.h ../include/lobject.h ../include/llimits.h \
- ../include/lzio.h ../include/lmem.h ../include/lopcodes.h ../include/lparser.h ../include/ldebug.h ../include/lstate.h ../include/ltm.h ../include/ldo.h ../include/lgc.h \
- ../include/lstring.h ../include/ltable.h ../include/lvm.h
-lcorolib.o: lcorolib.cpp ../include/lua.h ../include/luaconf.h ../include/lauxlib.h ../include/lualib.h
-lctype.o: lctype.cpp ../include/lctype.h ../include/lua.h ../include/luaconf.h ../include/llimits.h
-ldblib.o: ldblib.cpp ../include/lua.h ../include/luaconf.h ../include/lauxlib.h ../include/lualib.h
-ldebug.o: ldebug.cpp ../include/lua.h ../include/luaconf.h ../include/lapi.h ../include/llimits.h ../include/lstate.h ../include/lobject.h \
- ../include/ltm.h ../include/lzio.h ../include/lmem.h ../include/lcode.h ../include/llex.h ../include/lopcodes.h ../include/lparser.h ../include/ldebug.h ../include/ldo.h \
- ../include/lfunc.h ../include/lstring.h ../include/lgc.h ../include/ltable.h ../include/lvm.h
-ldo.o: ldo.cpp ../include/lua.h ../include/luaconf.h ../include/lapi.h ../include/llimits.h ../include/lstate.h ../include/lobject.h ../include/ltm.h \
- ../include/lzio.h ../include/lmem.h ../include/ldebug.h ../include/ldo.h ../include/lfunc.h ../include/lgc.h ../include/lopcodes.h ../include/lparser.h \
- ../include/lstring.h ../include/ltable.h ../include/lundump.h ../include/lvm.h
-ldump.o: ldump.cpp ../include/lua.h ../include/luaconf.h ../include/lobject.h ../include/llimits.h ../include/lstate.h ../include/ltm.h \
- ../include/lzio.h ../include/lmem.h ../include/lundump.h
-lfunc.o: lfunc.cpp ../include/lua.h ../include/luaconf.h ../include/lfunc.h ../include/lobject.h ../include/llimits.h ../include/lgc.h \
- ../include/lstate.h ../include/ltm.h ../include/lzio.h ../include/lmem.h
-lgc.o: lgc.cpp ../include/lua.h ../include/luaconf.h ../include/ldebug.h ../include/lstate.h ../include/lobject.h ../include/llimits.h ../include/ltm.h \
- ../include/lzio.h ../include/lmem.h ../include/ldo.h ../include/lfunc.h ../include/lgc.h ../include/lstring.h ../include/ltable.h
-linit.o: linit.cpp ../include/lua.h ../include/luaconf.h ../include/lualib.h ../include/lauxlib.h
-liolib.o: liolib.cpp ../include/lua.h ../include/luaconf.h ../include/lauxlib.h ../include/lualib.h
-llex.o: llex.cpp ../include/lua.h ../include/luaconf.h ../include/lctype.h ../include/llimits.h ../include/ldo.h ../include/lobject.h \
- ../include/lstate.h ../include/ltm.h ../include/lzio.h ../include/lmem.h ../include/llex.h ../include/lparser.h ../include/lstring.h ../include/lgc.h ../include/ltable.h
-lmathlib.o: lmathlib.cpp ../include/lua.h ../include/luaconf.h ../include/lauxlib.h ../include/lualib.h
-lmem.o: lmem.cpp ../include/lua.h ../include/luaconf.h ../include/ldebug.h ../include/lstate.h ../include/lobject.h ../include/llimits.h
-loadlib.o: loadlib.cpp ../include/lua.h ../include/luaconf.h ../include/lauxlib.h ../include/lualib.h
-lobject.o: lobject.cpp ../include/lua.h ../include/luaconf.h ../include/lctype.h ../include/llimits.h ../include/ldebug.h ../include/lstate.h \
- ../include/lobject.h ../include/ltm.h ../include/lzio.h ../include/lmem.h ../include/ldo.h ../include/lstring.h ../include/lgc.h ../include/lvm.h
-lopcodes.o: lopcodes.cpp ../include/lopcodes.h ../include/llimits.h ../include/lua.h ../include/luaconf.h
-loslib.o: loslib.cpp ../include/lua.h ../include/luaconf.h ../include/lauxlib.h ../include/lualib.h
-lparser.o: lparser.cpp ../include/lua.h ../include/luaconf.h ../include/lcode.h ../include/llex.h ../include/lobject.h ../include/llimits.h \
- ../include/lzio.h ../include/lmem.h ../include/lopcodes.h ../include/lparser.h ../include/ldebug.h ../include/lstate.h ../include/ltm.h ../include/ldo.h ../include/lfunc.h \
- ../include/lstring.h ../include/lgc.h ../include/ltable.h
-lstate.o: lstate.cpp ../include/lua.h ../include/luaconf.h ../include/lapi.h ../include/llimits.h ../include/lstate.h ../include/lobject.h \
- ../include/ltm.h ../include/lzio.h ../include/lmem.h ../include/ldebug.h ../include/ldo.h ../include/lfunc.h ../include/lgc.h ../include/llex.h ../include/lstring.h \
- ../include/ltable.h
-lstring.o: lstring.cpp ../include/lua.h ../include/luaconf.h ../include/lmem.h ../include/llimits.h ../include/lobject.h ../include/lstate.h \
- ../include/ltm.h ../include/lzio.h ../include/lstring.h ../include/lgc.h
-lstrlib.o: lstrlib.cpp ../include/lua.h ../include/luaconf.h ../include/lauxlib.h ../include/lualib.h
-ltable.o: ltable.cpp ../include/lua.h ../include/luaconf.h ../include/ldebug.h ../include/lstate.h ../include/lobject.h ../include/llimits.h \
- ../include/ltm.h ../include/lzio.h ../include/lmem.h ../include/ldo.h ../include/lgc.h ../include/lstring.h ../include/ltable.h ../include/lvm.h
-ltablib.o: ltablib.cpp ../include/lua.h ../include/luaconf.h ../include/lauxlib.h ../include/lualib.h
-ltm.o: ltm.cpp ../include/lua.h ../include/luaconf.h ../include/lobject.h ../include/llimits.h ../include/lstate.h ../include/ltm.h ../include/lzio.h \
- ../include/lmem.h ../include/lstring.h ../include/lgc.h ../include/ltable.h
-lua.o: lua.cpp ../include/lua.h ../include/luaconf.h ../include/lauxlib.h ../include/lualib.h
-luac.o: luac.cpp ../include/lua.h ../include/luaconf.h ../include/lauxlib.h ../include/lobject.h ../include/llimits.h ../include/lstate.h \
- ../include/ltm.h ../include/lzio.h ../include/lmem.h ../include/lundump.h ../include/ldebug.h ../include/lopcodes.h
-lundump.o: lundump.cpp ../include/lua.h ../include/luaconf.h ../include/ldebug.h ../include/lstate.h ../include/lobject.h \
- ../include/llimits.h ../include/ltm.h ../include/lzio.h ../include/lmem.h ../include/ldo.h ../include/lfunc.h ../include/lstring.h ../include/lgc.h ../include/lundump.h
-lvm.o: lvm.cpp ../include/lua.h ../include/luaconf.h ../include/ldebug.h ../include/lstate.h ../include/lobject.h ../include/llimits.h ../include/ltm.h \
- ../include/lzio.h ../include/lmem.h ../include/ldo.h ../include/lfunc.h ../include/lgc.h ../include/lopcodes.h ../include/lstring.h ../include/ltable.h ../include/lvm.h
-lzio.o: lzio.cpp ../include/lua.h ../include/luaconf.h ../include/llimits.h ../include/lmem.h ../include/lstate.h ../include/lobject.h ../include/ltm.h \
- ../include/lzio.h
+lopcodes.o: lopcodes.c ../include/lprefix.h ../include/lopcodes.h ../include/llimits.h ../include/lua.h ../include/luaconf.h
+loslib.o: loslib.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lauxlib.h lualib.h
+lparser.o: lparser.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lcode.h ../include/llex.h ../include/lobject.h \
+ ../include/llimits.h ../include/lzio.h ../include/lmem.h ../include/lopcodes.h ../include/lparser.h ../include/ldebug.h ../include/lstate.h ../include/ltm.h \
+ ../include/ldo.h ../include/lfunc.h ../include/lstring.h ../include/lgc.h ../include/ltable.h
+lstate.o: lstate.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lapi.h ../include/llimits.h ../include/lstate.h \
+ ../include/lobject.h ../include/ltm.h ../include/lzio.h ../include/lmem.h ../include/ldebug.h ../include/ldo.h ../include/lfunc.h ../include/lgc.h ../include/llex.h \
+ ../include/lstring.h ../include/ltable.h
+lstring.o: lstring.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/ldebug.h ../include/lstate.h \
+ ../include/lobject.h ../include/llimits.h ../include/ltm.h ../include/lzio.h ../include/lmem.h ../include/ldo.h ../include/lstring.h ../include/lgc.h
+lstrlib.o: lstrlib.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lauxlib.h lualib.h
+ltable.o: ltable.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/ldebug.h ../include/lstate.h ../include/lobject.h \
+ ../include/llimits.h ../include/ltm.h ../include/lzio.h ../include/lmem.h ../include/ldo.h ../include/lgc.h ../include/lstring.h ../include/ltable.h ../include/lvm.h
+ltablib.o: ltablib.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lauxlib.h lualib.h
+ltm.o: ltm.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/ldebug.h ../include/lstate.h ../include/lobject.h \
+ ../include/llimits.h ../include/ltm.h ../include/lzio.h ../include/lmem.h ../include/ldo.h ../include/lstring.h ../include/lgc.h ../include/ltable.h ../include/lvm.h
+lua.o: lua.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lauxlib.h lualib.h
+luac.o: luac.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lauxlib.h ../include/lobject.h ../include/llimits.h \
+ ../include/lstate.h ../include/ltm.h ../include/lzio.h ../include/lmem.h ../include/lundump.h ../include/ldebug.h ../include/lopcodes.h
+lundump.o: lundump.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/ldebug.h ../include/lstate.h \
+ ../include/lobject.h ../include/llimits.h ../include/ltm.h ../include/lzio.h ../include/lmem.h ../include/ldo.h ../include/lfunc.h ../include/lstring.h ../include/lgc.h \
+ ../include/lundump.h
+lutf8lib.o: lutf8lib.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/lauxlib.h lualib.h
+lvm.o: lvm.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/ldebug.h ../include/lstate.h ../include/lobject.h \
+ ../include/llimits.h ../include/ltm.h ../include/lzio.h ../include/lmem.h ../include/ldo.h ../include/lfunc.h ../include/lgc.h ../include/lopcodes.h ../include/lstring.h \
+ ../include/ltable.h ../include/lvm.h
+lzio.o: lzio.c ../include/lprefix.h ../include/lua.h ../include/luaconf.h ../include/llimits.h ../include/lmem.h ../include/lstate.h \
+ ../include/lobject.h ../include/ltm.h ../include/lzio.h
 
+# (end of Makefile)
