@@ -66,7 +66,9 @@
 
 
 #if defined(LUA_USE_MACOSX)
-#define LUA_USE_POSIX
+#if !defined(LUA_USE_POSIX)
+	#define LUA_USE_POSIX
+#endif
 #define LUA_USE_DLOPEN		/* MacOS does not need -ldl */
 #define LUA_USE_READLINE	/* needs an extra library: -lreadline */
 #endif
@@ -207,7 +209,7 @@
 		LUA_LDIR"?.lua;"  LUA_LDIR"?/init.lua;" \
 		LUA_CDIR"?.lua;"  LUA_CDIR"?/init.lua;" \
 		"./?.lua;" "./?/init.lua"
-#ifdef __APPLE__
+#ifdef LUA_USE_MACOSX
 #define LUA_CPATH_DEFAULT \
 		LUA_CDIR"?.so;" LUA_CDIR"loadall.so;" "./?.so;" \
 		LUA_CDIR"?.dylib;" LUA_CDIR"loadall.dylib;" "./?.dylib;" \

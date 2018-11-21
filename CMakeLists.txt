@@ -3,7 +3,6 @@
 # Redistribution and use of this file is allowed according to the terms of the MIT license.
 # For details see the COPYRIGHT file distributed with LuaDist.
 # Please note that the package source code is licensed under its own license.
-
 # Changed by Vinicius Jarina (viniciusjarina@gmail.com)
 
 PROJECT ( lua C )
@@ -15,13 +14,20 @@ ELSE (CMAKE_SIZEOF_VOID_P EQUAL 8)
 	SET (LIB_SUFFIX "" CACHE STRING "Suffix of the directory name, e.g. 64 for lib64")
 ENDIF (CMAKE_SIZEOF_VOID_P EQUAL 8)
 
-set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
-if (APPLE)
-  set(CMAKE_INSTALL_NAME_DIR "@rpath")
-  set(CMAKE_INSTALL_RPATH "@executable_path/../lib${LIB_SUFFIX}")
-else(UNIX)
-  set(CMAKE_INSTALL_RPATH "\$ORIGIN/../lib${LIB_SUFFIX}")
-endif()
+SET (CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
+
+# $ORIGIN support in rpath.
+IF (UNIX AND NOT APPLE)
+    SET (USE_RPATH_ORIGIN TRUE)
+    SET (CMAKE_INSTALL_RPATH "\$ORIGIN/../lib${LIB_SUFFIX}")
+  ENDIF ()
+
+IF (APPLE)
+  SET(SKIP_BUILD_RPATH, TRUE)
+  SET(CMAKE_MACOSX_RPATH 1)
+  ADD_DEFINITIONS (-DLUA_USE_MACOSX)
+  LIST ( APPEND LIBS readline )
+ENDIF ()
 
 SET(CMAKE_DEBUG_POSTFIX "d")
 SET(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib${LIB_SUFFIX}" CACHE STRING "Library build output directory")
@@ -166,7 +172,7 @@ SET_TARGET_PROPERTIES(  liblua_static PROPERTIES ARCHIVE_OUTPUT_DIRECTORY_DEBUG 
 SET_TARGET_PROPERTIES(  liblua_static PROPERTIES LIBRARY_OUTPUT_DIRECTORY_DEBUG ${PROJECT_BINARY_DIR}/lib${LIB_SUFFIX} )
 
 ADD_EXECUTABLE ( lua ${SRC_LUA} ${LUA_RC})
-TARGET_LINK_LIBRARIES ( lua liblua )
+TARGET_LINK_LIBRARIES ( lua liblua ${LIBS})
 
 SET_TARGET_PROPERTIES ( lua PROPERTIES DEBUG_POSTFIX d)
 
