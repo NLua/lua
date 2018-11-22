@@ -1,7 +1,0 @@
-//
-// Prefix header for all source files of the 'Lua_iPhone' target in the 'Lua_iPhone' project
-//
-
-#ifdef __OBJC__
-    #import <Foundation/Foundation.h>
-#endif
