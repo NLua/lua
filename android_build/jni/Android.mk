@@ -1,14 +1,13 @@
 LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 LOCAL_C_INCLUDES += ../include 
-LOCAL_MODULE    := lua52
-LOCAL_CFLAGS    := -DLUA_ANSI -I../include
+LOCAL_MODULE    := lua53
+LOCAL_CFLAGS    := -DLUA_USE_POSIX -I../include
 LOCAL_SRC_FILES :=  \
- ../../src/lapi.cpp ../../src/lauxlib.cpp ../../src/lbaselib.cpp ../../src/lbitlib.cpp ../../src/lcode.cpp ../../src/lcorolib.cpp ../../src/lctype.cpp \
- ../../src/ldblib.cpp ../../src/ldebug.cpp ../../src/ldo.cpp ../../src/ldump.cpp ../../src/lfunc.cpp ../../src/lgc.cpp ../../src/linit.cpp ../../src/liolib.cpp \
- ../../src/llex.cpp ../../src/lmathlib.cpp ../../src/lmem.cpp ../../src/lnet.cpp ../../src/loadlib.cpp ../../src/lobject.cpp \
- ../../src/lopcodes.cpp ../../src/loslib.cpp ../../src/lparser.cpp ../../src/lstate.cpp ../../src/lstring.cpp ../../src/lstrlib.cpp ../../src/ltable.cpp \
- ../../src/ltablib.cpp ../../src/ltm.cpp ../../src/lundump.cpp ../../src/lvm.cpp ../../src/lzio.cpp
- 
+ ../../src/lapi.c ../../src/lauxlib.c ../../src/lbaselib.c ../../src/lbitlib.c ../../src/lcode.c ../../src/lcorolib.c ../../src/lctype.c \
+ ../../src/ldblib.c ../../src/ldebug.c ../../src/ldo.c ../../src/ldump.c ../../src/lfunc.c ../../src/lgc.c ../../src/linit.c ../../src/liolib.c \
+ ../../src/llex.c ../../src/lmathlib.c ../../src/lmem.c ../../src/loadlib.c ../../src/lobject.c \
+ ../../src/lopcodes.c ../../src/loslib.c ../../src/lparser.c ../../src/lstate.c ../../src/lstring.c ../../src/lstrlib.c ../../src/ltable.c \
+ ../../src/ltablib.c ../../src/ltm.c ../../src/lundump.c ../../src/lutf8lib.c ../../src/lvm.c ../../src/lzio.c
 
 include $(BUILD_SHARED_LIBRARY)
