@@ -70,6 +70,7 @@ ENDIF ()
 IF ( LUA_USE_DLOPEN )
   # Link to dynamic linker library "dl"
   LIST ( APPEND LIBS dl )
+  ADD_DEFINITIONS (-DLUA_USE_DLOPEN)
 ENDIF ()
 
 IF ( LUA_WIN )
