@@ -1,5 +1,5 @@
 /*
-** $Id: lfunc.c,v 2.45.1.1 2017/04/19 17:39:34 roberto Exp $
+** $Id: lfunc.c $
 ** Auxiliary functions to manipulate prototypes and closures
 ** See Copyright Notice in lua.h
 */
@@ -14,6 +14,8 @@
 
 #include "lua.h"
 
+#include "ldebug.h"
+#include "ldo.h"
 #include "lfunc.h"
 #include "lgc.h"
 #include "lmem.h"
@@ -39,39 +41,37 @@ LClosure *luaF_newLclosure (lua_State *L, int n) {
   return c;
 }
 
+
 /*
 ** fill a closure with new closed upvalues
 */
 void luaF_initupvals (lua_State *L, LClosure *cl) {
   int i;
   for (i = 0; i < cl->nupvalues; i++) {
-    UpVal *uv = luaM_new(L, UpVal);
-    uv->refcount = 1;
+    GCObject *o = luaC_newobj(L, LUA_TUPVAL, sizeof(UpVal));
+    UpVal *uv = gco2upv(o);
     uv->v = &uv->u.value;  /* make it closed */
     setnilvalue(uv->v);
     cl->upvals[i] = uv;
+    luaC_objbarrier(L, cl, o);
   }
 }
 
 
-UpVal *luaF_findupval (lua_State *L, StkId level) {
-  UpVal **pp = &L->openupval;
-  UpVal *p;
-  UpVal *uv;
-  lua_assert(isintwups(L) || L->openupval == NULL);
-  while (*pp != NULL && (p = *pp)->v >= level) {
-    lua_assert(upisopen(p));
-    if (p->v == level)  /* found a corresponding upvalue? */
-      return p;  /* return it */
-    pp = &p->u.open.next;
-  }
-  /* not found: create a new upvalue */
-  uv = luaM_new(L, UpVal);
-  uv->refcount = 0;
-  uv->u.open.next = *pp;  /* link it to list of open upvalues */
-  uv->u.open.touched = 1;
-  *pp = uv;
-  uv->v = level;  /* current value lives in the stack */
+/*
+** Create a new upvalue with the given tag at the given level,
+** and link it to the list of open upvalues of 'L' after entry 'prev'.
+**/
+static UpVal *newupval (lua_State *L, int tag, StkId level, UpVal **prev) {
+  GCObject *o = luaC_newobj(L, tag, sizeof(UpVal));
+  UpVal *uv = gco2upv(o);
+  UpVal *next = *prev;
+  uv->v = s2v(level);  /* current value lives in the stack */
+  uv->u.open.next = next;  /* link it to list of open upvalues */
+  uv->u.open.previous = prev;
+  if (next)
+    next->u.open.previous = &uv->u.open.next;
+  *prev = uv;
   if (!isintwups(L)) {  /* thread not in list of threads with upvalues? */
     L->twups = G(L)->twups;  /* link it to the list */
     G(L)->twups = L;
@@ -80,19 +80,139 @@ UpVal *luaF_findupval (lua_State *L, StkId level) {
 }
 
 
-void luaF_close (lua_State *L, StkId level) {
-  UpVal *uv;
-  while (L->openupval != NULL && (uv = L->openupval)->v >= level) {
-    lua_assert(upisopen(uv));
-    L->openupval = uv->u.open.next;  /* remove from 'open' list */
-    if (uv->refcount == 0)  /* no references? */
-      luaM_free(L, uv);  /* free upvalue */
-    else {
-      setobj(L, &uv->u.value, uv->v);  /* move value to upvalue slot */
-      uv->v = &uv->u.value;  /* now current value lives here */
-      luaC_upvalbarrier(L, uv);
+/*
+** Find and reuse, or create if it does not exist, a regular upvalue
+** at the given level.
+*/
+UpVal *luaF_findupval (lua_State *L, StkId level) {
+  UpVal **pp = &L->openupval;
+  UpVal *p;
+  lua_assert(isintwups(L) || L->openupval == NULL);
+  while ((p = *pp) != NULL && uplevel(p) >= level) {  /* search for it */
+    if (uplevel(p) == level && !isdead(G(L), p))  /* corresponding upvalue? */
+      return p;  /* return it */
+    pp = &p->u.open.next;
+  }
+  /* not found: create a new upvalue after 'pp' */
+  return newupval(L, LUA_TUPVAL, level, pp);
+}
+
+
+static void callclose (lua_State *L, void *ud) {
+  UNUSED(ud);
+  luaD_callnoyield(L, L->top - 3, 0);
+}
+
+
+/*
+** Prepare closing method plus its arguments for object 'obj' with
+** error message 'err'. (This function assumes EXTRA_STACK.)
+*/
+static int prepclosingmethod (lua_State *L, TValue *obj, TValue *err) {
+  StkId top = L->top;
+  const TValue *tm = luaT_gettmbyobj(L, obj, TM_CLOSE);
+  if (ttisnil(tm))  /* no metamethod? */
+    return 0;  /* nothing to call */
+  setobj2s(L, top, tm);  /* will call metamethod... */
+  setobj2s(L, top + 1, obj);  /* with 'self' as the 1st argument */
+  setobj2s(L, top + 2, err);  /* and error msg. as 2nd argument */
+  L->top = top + 3;  /* add function and arguments */
+  return 1;
+}
+
+
+/*
+** Prepare and call a closing method. If status is OK, code is still
+** inside the original protected call, and so any error will be handled
+** there. Otherwise, a previous error already activated original
+** protected call, and so the call to the closing method must be
+** protected here. (A status = CLOSEPROTECT behaves like a previous
+** error, to also run the closing method in protected mode).
+** If status is OK, the call to the closing method will be pushed
+** at the top of the stack. Otherwise, values are pushed after
+** the 'level' of the upvalue being closed, as everything after
+** that won't be used again.
+*/
+static int callclosemth (lua_State *L, TValue *uv, StkId level, int status) {
+  if (likely(status == LUA_OK)) {
+    if (prepclosingmethod(L, uv, &G(L)->nilvalue))  /* something to call? */
+      callclose(L, NULL);  /* call closing method */
+    else if (!ttisnil(uv)) {  /* non-closable non-nil value? */
+      int idx = cast_int(level - L->ci->func);
+      const char *vname = luaG_findlocal(L, L->ci, idx, NULL);
+      if (vname == NULL) vname = "?";
+      luaG_runerror(L, "attempt to close non-closable variable '%s'", vname);
     }
   }
+  else {  /* there was an error */
+    /* save error message and set stack top to 'level + 1' */
+    luaD_seterrorobj(L, status, level);
+    if (prepclosingmethod(L, uv, s2v(level))) {  /* something to call? */
+      int newstatus = luaD_pcall(L, callclose, NULL, savestack(L, level), 0);
+      if (newstatus != LUA_OK)  /* another error when closing? */
+        status = newstatus;  /* this will be the new error */
+    }
+    /* else no metamethod; ignore this case and keep original error */
+  }
+  return status;
+}
+
+
+/*
+** Try to create a to-be-closed upvalue
+** (can raise a memory-allocation error)
+*/
+static void trynewtbcupval (lua_State *L, void *ud) {
+  StkId level = cast(StkId, ud);
+  lua_assert(L->openupval == NULL || uplevel(L->openupval) < level);
+  newupval(L, LUA_TUPVALTBC, level, &L->openupval);
+}
+
+
+/*
+** Create a to-be-closed upvalue. If there is a memory error
+** when creating the upvalue, the closing method must be called here,
+** as there is no upvalue to call it later.
+*/
+void luaF_newtbcupval (lua_State *L, StkId level) {
+  int status = luaD_rawrunprotected(L, trynewtbcupval, level);
+  if (unlikely(status != LUA_OK)) {  /* memory error creating upvalue? */
+    lua_assert(status == LUA_ERRMEM);
+    luaD_seterrorobj(L, LUA_ERRMEM, level + 1);  /* save error message */
+    if (prepclosingmethod(L, s2v(level), s2v(level + 1)))
+      callclose(L, NULL);  /* call closing method */
+    luaD_throw(L, LUA_ERRMEM);  /* throw memory error */
+  }
+}
+
+
+void luaF_unlinkupval (UpVal *uv) {
+  lua_assert(upisopen(uv));
+  *uv->u.open.previous = uv->u.open.next;
+  if (uv->u.open.next)
+    uv->u.open.next->u.open.previous = uv->u.open.previous;
+}
+
+
+int luaF_close (lua_State *L, StkId level, int status) {
+  UpVal *uv;
+  while ((uv = L->openupval) != NULL && uplevel(uv) >= level) {
+    StkId upl = uplevel(uv);
+    TValue *slot = &uv->u.value;  /* new position for value */
+    luaF_unlinkupval(uv);
+    setobj(L, slot, uv->v);  /* move value to upvalue slot */
+    uv->v = slot;  /* now current value lives here */
+    if (!iswhite(uv))
+      gray2black(uv);  /* closed upvalues cannot be gray */
+    luaC_barrier(L, uv, slot);
+    if (uv->tt == LUA_TUPVALTBC && status != NOCLOSINGMETH) {
+      /* must run closing method */
+      ptrdiff_t levelrel = savestack(L, level);
+      status = callclosemth(L, uv->v, upl, status);  /* may change the stack */
+      level = restorestack(L, levelrel);
+    }
+  }
+  return status;
 }
 
 
@@ -104,10 +224,11 @@ Proto *luaF_newproto (lua_State *L) {
   f->p = NULL;
   f->sizep = 0;
   f->code = NULL;
-  f->cache = NULL;
   f->sizecode = 0;
   f->lineinfo = NULL;
   f->sizelineinfo = 0;
+  f->abslineinfo = NULL;
+  f->sizeabslineinfo = 0;
   f->upvalues = NULL;
   f->sizeupvalues = 0;
   f->numparams = 0;
@@ -127,6 +248,7 @@ void luaF_freeproto (lua_State *L, Proto *f) {
   luaM_freearray(L, f->p, f->sizep);
   luaM_freearray(L, f->k, f->sizek);
   luaM_freearray(L, f->lineinfo, f->sizelineinfo);
+  luaM_freearray(L, f->abslineinfo, f->sizeabslineinfo);
   luaM_freearray(L, f->locvars, f->sizelocvars);
   luaM_freearray(L, f->upvalues, f->sizeupvalues);
   luaM_free(L, f);

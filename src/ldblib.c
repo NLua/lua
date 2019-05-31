@@ -1,5 +1,5 @@
 /*
-** $Id: ldblib.c,v 1.151.1.1 2017/04/19 17:20:42 roberto Exp $
+** $Id: ldblib.c $
 ** Interface from Lua to its debug API
 ** See Copyright Notice in lua.h
 */
@@ -55,8 +55,7 @@ static int db_getmetatable (lua_State *L) {
 
 static int db_setmetatable (lua_State *L) {
   int t = lua_type(L, 2);
-  luaL_argcheck(L, t == LUA_TNIL || t == LUA_TTABLE, 2,
-                    "nil or table expected");
+  luaL_argexpected(L, t == LUA_TNIL || t == LUA_TTABLE, 2, "nil or table");
   lua_settop(L, 2);
   lua_setmetatable(L, 1);
   return 1;  /* return 1st argument */
@@ -64,19 +63,24 @@ static int db_setmetatable (lua_State *L) {
 
 
 static int db_getuservalue (lua_State *L) {
+  int n = (int)luaL_optinteger(L, 2, 1);
   if (lua_type(L, 1) != LUA_TUSERDATA)
     lua_pushnil(L);
-  else
-    lua_getuservalue(L, 1);
+  else if (lua_getiuservalue(L, 1, n) != LUA_TNONE) {
+    lua_pushboolean(L, 1);
+    return 2;
+  }
   return 1;
 }
 
 
 static int db_setuservalue (lua_State *L) {
+  int n = (int)luaL_optinteger(L, 3, 1);
   luaL_checktype(L, 1, LUA_TUSERDATA);
   luaL_checkany(L, 2);
   lua_settop(L, 2);
-  lua_setuservalue(L, 1);
+  if (!lua_setiuservalue(L, 1, n))
+    lua_pushnil(L);
   return 1;
 }
 
@@ -146,7 +150,7 @@ static int db_getinfo (lua_State *L) {
   lua_Debug ar;
   int arg;
   lua_State *L1 = getthread(L, &arg);
-  const char *options = luaL_optstring(L, arg+2, "flnStu");
+  const char *options = luaL_optstring(L, arg+2, "flnSrtu");
   checkstack(L, L1, 3);
   if (lua_isfunction(L, arg + 1)) {  /* info about a function? */
     options = lua_pushfstring(L, ">%s", options);  /* add '>' to 'options' */
@@ -163,7 +167,8 @@ static int db_getinfo (lua_State *L) {
     return luaL_argerror(L, arg+2, "invalid option");
   lua_newtable(L);  /* table to collect results */
   if (strchr(options, 'S')) {
-    settabss(L, "source", ar.source);
+    lua_pushlstring(L, ar.source, ar.srclen);
+    lua_setfield(L, -2, "source");
     settabss(L, "short_src", ar.short_src);
     settabsi(L, "linedefined", ar.linedefined);
     settabsi(L, "lastlinedefined", ar.lastlinedefined);
@@ -179,6 +184,10 @@ static int db_getinfo (lua_State *L) {
   if (strchr(options, 'n')) {
     settabss(L, "name", ar.name);
     settabss(L, "namewhat", ar.namewhat);
+  }
+  if (strchr(options, 'r')) {
+    settabsi(L, "ftransfer", ar.ftransfer);
+    settabsi(L, "ntransfer", ar.ntransfer);
   }
   if (strchr(options, 't'))
     settabsb(L, "istailcall", ar.istailcall);

@@ -1,4 +1,4 @@
--- $Id: calls.lua,v 1.60 2016/11/07 13:11:28 roberto Exp $
+-- $Id: testes/calls.lua $
 -- See Copyright Notice in file all.lua
 
 print("testing functions and calls")
@@ -19,21 +19,6 @@ assert(type(assert) == type(print))
 function f (x) return a:x (x) end
 assert(type(f) == 'function')
 assert(not pcall(type))
-
-
-do    -- test error in 'print' too...
-  local tostring = _ENV.tostring
-
-  _ENV.tostring = nil
-  local st, msg = pcall(print, 1)
-  assert(st == false and string.find(msg, "attempt to call a nil value"))
-
-  _ENV.tostring = function () return {} end
-  local st, msg = pcall(print, 1)
-  assert(st == false and string.find(msg, "must return a string"))
-  
-  _ENV.tostring = tostring
-end
 
 
 -- testing local-function recursion
@@ -120,14 +105,48 @@ function deep (n)
   if n>0 then deep(n-1) end
 end
 deep(10)
-deep(200)
+deep(180)
 
--- testing tail call
+-- testing tail calls
 function deep (n) if n>0 then return deep(n-1) else return 101 end end
 assert(deep(30000) == 101)
 a = {}
 function a:deep (n) if n>0 then return self:deep(n-1) else return 101 end end
 assert(a:deep(30000) == 101)
+
+do   -- tail calls x varargs
+  local function foo (x, ...) local a = {...}; return x, a[1], a[2] end
+
+  local function foo1 (x) return foo(10, x, x + 1) end
+
+  local a, b, c = foo1(-2)
+  assert(a == 10 and b == -2 and c == -1)
+
+  -- tail calls x metamethods
+  local t = setmetatable({}, {__call = foo})
+  local function foo2 (x) return t(10, x) end
+  a, b, c = foo2(100)
+  assert(a == t and b == 10 and c == 100)
+
+  a, b = (function () return foo() end)()
+  assert(a == nil and b == nil)
+
+  local X, Y, A
+  local function foo (x, y, ...) X = x; Y = y; A = {...} end
+  local function foo1 (...) return foo(...) end
+
+  local a, b, c = foo1()
+  assert(X == nil and Y == nil and #A == 0)
+
+  a, b, c = foo1(10)
+  assert(X == 10 and Y == nil and #A == 0)
+
+  a, b, c = foo1(10, 20)
+  assert(X == 10 and Y == 20 and #A == 0)
+
+  a, b, c = foo1(10, 20, 30)
+  assert(X == 10 and Y == 20 and #A == 1 and A[1] == 30)
+end
 
 print('+')
 
@@ -363,17 +382,15 @@ assert((function (a) return a end)() == nil)
 
 print("testing binary chunks")
 do
-  local header = string.pack("c4BBc6BBBBBj",
-    "\27Lua",                -- signature
-    5*16 + 3,                -- version 5.3
-    0,                       -- format
-    "\x19\x93\r\n\x1a\n",    -- data
-    string.packsize("i"),    -- sizeof(int)
-    string.packsize("T"),    -- sizeof(size_t)
-    4,                       -- size of instruction
-    string.packsize("j"),    -- sizeof(lua integer)
-    string.packsize("n"),    -- sizeof(lua number)
-    0x5678                   -- LUAC_INT
+  local header = string.pack("c4BBBc6BBBj",
+    "\27Lua",                                  -- signature
+    (504 >> 7) & 0x7f, (504 & 0x7f) | 0x80,    -- version 5.4 (504)
+    0,                                         -- format
+    "\x19\x93\r\n\x1a\n",                      -- data
+    4,                                         -- size of instruction
+    string.packsize("j"),                      -- sizeof(lua integer)
+    string.packsize("n"),                      -- sizeof(lua number)
+    0x5678                                     -- LUAC_INT
     -- LUAC_NUM may not have a unique binary representation (padding...)
   )
   local c = string.dump(function () local a = 1; local b = 3; return a+b*3 end)

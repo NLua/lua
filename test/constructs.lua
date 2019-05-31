@@ -1,4 +1,4 @@
--- $Id: constructs.lua,v 1.41 2016/11/07 13:11:28 roberto Exp $
+-- $Id: testes/constructs.lua $
 -- See Copyright Notice in file all.lua
 
 ;;print "testing syntax";;
@@ -32,10 +32,6 @@ assert(-3%5 == 2 and -3+5 == 2)
 assert(2*1+3/3 == 3 and 1+2 .. 3*1 == "33");
 assert(not(2+1 > 3*1) and "a".."b" > "a");
 
-assert("7" .. 3 << 1 == 146)
-assert(10 >> 1 .. "9" == 0)
-assert(10 | 1 .. "9" == 27)
-
 assert(0xF0 | 0xCC ~ 0xAA & 0xFD == 0xF4)
 assert(0xFD & 0xAA ~ 0xCC | 0xF0 == 0xF4)
 assert(0xF0 & 0x0F + 1 == 0x10)
@@ -62,6 +58,41 @@ x,y=2,1;
 assert((x>y) and x or y == 2);
 
 assert(1234567890 == tonumber('1234567890') and 1234567890+1 == 1234567891)
+
+do   -- testing operators with diffent kinds of constants
+  -- operands to consider:
+  --  * fit in register
+  --  * constant doesn't fit in register
+  --  * floats with integral values
+  local operand = {3, 100, 5.0, -10, -5.0, 10000, -10000}
+  local operator = {"+", "-", "*", "/", "//", "%", "^",
+                    "&", "|", "^", "<<", ">>",
+                    "==", "~=", "<", ">", "<=", ">=",}
+  for _, op in ipairs(operator) do
+    local f = assert(load(string.format([[return function (x,y)
+                return x %s y
+              end]], op)))();
+    for _, o1 in ipairs(operand) do
+      for _, o2 in ipairs(operand) do
+        local gab = f(o1, o2)
+
+        _ENV.XX = o1
+        code = string.format("return XX %s %s", op, o2)
+        res = assert(load(code))()
+        assert(res == gab)
+
+        _ENV.XX = o2
+        local code = string.format("return (%s) %s XX", o1, op)
+        local res = assert(load(code))()
+        assert(res == gab)
+
+        code = string.format("return (%s) %s %s", o1, op, o2)
+        res = assert(load(code))()
+        assert(res == gab)
+      end
+    end
+  end
+end
 
 
 -- silly loops
@@ -179,6 +210,28 @@ assert(a==1 and b==nil)
 
 print'+';
 
+do   -- testing constants
+  local <const> prog = [[local <XXX> x = 10]]
+  checkload(prog, "unknown attribute 'XXX'")
+
+  checkload([[local <const> xxx = 20; xxx = 10]],
+             ":1: attempt to assign to const variable 'xxx'")
+
+  checkload([[
+    local xx;
+    local <const> xxx = 20;
+    local yyy;
+    local function foo ()
+      local abc = xx + yyy + xxx;
+      return function () return function () xxx = yyy end end
+    end
+  ]], ":6: attempt to assign to const variable 'xxx'")
+
+  checkload([[
+    local <toclose> x = nil
+    x = io.open()
+  ]], ":2: attempt to assign to const variable 'x'")
+end
 
 f = [[
 return function ( a , b , c , d , e )
@@ -249,12 +302,12 @@ print('testing short-circuit optimizations (' .. _ENV.GLOB1 .. ')')
 
 
 -- operators with their respective values
-local binops = {
+local <const> binops = {
   {" and ", function (a,b) if not a then return a else return b end end},
   {" or ", function (a,b) if a then return a else return b end end},
 }
 
-local cases = {}
+local <const> cases = {}
 
 -- creates all combinations of '(cases[i] op cases[n-i])' plus
 -- 'not(cases[i] op cases[n-i])' (syntax + value)
@@ -302,12 +355,5 @@ end
 -- testing some syntax errors (chosen through 'gcov')
 checkload("for x do", "expected")
 checkload("x:call", "expected")
-
-if not _soft then
-  -- control structure too long
-  local s = string.rep("a = a + 1\n", 2^18)
-  s = "while true do " .. s .. "end"
-  checkload(s, "too long")
-end
 
 print'OK'

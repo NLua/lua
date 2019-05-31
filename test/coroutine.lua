@@ -1,4 +1,4 @@
--- $Id: coroutine.lua,v 1.42 2016/11/07 13:03:20 roberto Exp $
+-- $Id: testes/coroutine.lua $
 -- See Copyright Notice in file all.lua
 
 print "testing coroutines"
@@ -10,7 +10,7 @@ local f
 local main, ismain = coroutine.running()
 assert(type(main) == "thread" and ismain)
 assert(not coroutine.resume(main))
-assert(not coroutine.isyieldable())
+assert(not coroutine.isyieldable(main) and not coroutine.isyieldable())
 assert(not pcall(coroutine.yield))
 
 
@@ -38,7 +38,7 @@ function foo (a, ...)
   assert(coroutine.resume(f) == false)
   assert(coroutine.status(f) == "running")
   local arg = {...}
-  assert(coroutine.isyieldable())
+  assert(coroutine.isyieldable(x))
   for i=1,#arg do
     _G.x = {coroutine.yield(table.unpack(arg[i]))}
   end
@@ -46,14 +46,17 @@ function foo (a, ...)
 end
 
 f = coroutine.create(foo)
+assert(coroutine.isyieldable(f))
 assert(type(f) == "thread" and coroutine.status(f) == "suspended")
 assert(string.find(tostring(f), "thread"))
 local s,a,b,c,d
 s,a,b,c,d = coroutine.resume(f, {1,2,3}, {}, {1}, {'a', 'b', 'c'})
+assert(coroutine.isyieldable(f))
 assert(s and a == nil and coroutine.status(f) == "suspended")
 s,a,b,c,d = coroutine.resume(f)
 eqtab(_G.x, {})
 assert(s and a == 1 and b == nil)
+assert(coroutine.isyieldable(f))
 s,a,b,c,d = coroutine.resume(f, 1, 2, 3)
 eqtab(_G.x, {1, 2, 3})
 assert(s and a == 'a' and b == 'b' and c == 'c' and d == nil)
@@ -107,7 +110,7 @@ function filter (p, g)
   end)
 end
 
-local x = gen(100)
+local x = gen(80)
 local a = {}
 while 1 do
   local n = x()
@@ -116,8 +119,62 @@ while 1 do
   x = filter(n, x)
 end
 
-assert(#a == 25 and a[#a] == 97)
+assert(#a == 22 and a[#a] == 79)
 x, a = nil
+
+
+-- coroutine kill
+do
+  -- ok to kill a dead coroutine
+  local co = coroutine.create(print)
+  assert(coroutine.resume(co, "testing 'coroutine.kill'"))
+  assert(coroutine.status(co) == "dead")
+  assert(coroutine.kill(co))
+
+  -- cannot kill the running coroutine
+  local st, msg = pcall(coroutine.kill, coroutine.running())
+  assert(not st and string.find(msg, "running"))
+
+  local main = coroutine.running()
+
+  -- cannot kill a "normal" coroutine
+  ;(coroutine.wrap(function ()
+    local st, msg = pcall(coroutine.kill, main)
+    assert(not st and string.find(msg, "normal"))
+  end))()
+
+  -- to-be-closed variables in coroutines
+  local X
+
+  local function func2close (f)
+    return setmetatable({}, {__close = f})
+  end
+
+  co = coroutine.create(function ()
+    local <toclose> x = func2close(function (self, err)
+      assert(err == nil); X = false
+    end)
+    X = true
+    coroutine.yield()
+  end)
+  coroutine.resume(co)
+  assert(X)
+  assert(coroutine.kill(co))
+  assert(not X and coroutine.status(co) == "dead")
+
+  -- error killing a coroutine
+  co = coroutine.create(function()
+    local <toclose> x = func2close(function (self, err)
+      assert(err == nil); error(111)
+    end)
+    coroutine.yield()
+  end)
+  coroutine.resume(co)
+  local st, msg = coroutine.kill(co)
+  assert(not st and coroutine.status(co) == "dead" and msg == 111)
+
+end
+
 
 -- yielding across C boundaries
 
@@ -177,6 +234,26 @@ do
 end
 
 
+
+do   -- testing single trace of coroutines
+  local X
+  local co = coroutine.create(function ()
+    coroutine.yield(10)
+    return 20;
+  end)
+  local trace = {}
+  local function dotrace (event)
+    trace[#trace + 1] = event
+  end
+  debug.sethook(co, dotrace, "clr")
+  repeat until not coroutine.resume(co)
+  local correcttrace = {"call", "line", "call", "return", "line", "return"}
+  assert(#trace == #correcttrace)
+  for k, v in pairs(trace) do
+    assert(v == correcttrace[k])
+  end
+end
+
 -- errors in coroutines
 function foo ()
   assert(debug.getinfo(1).currentline == debug.getinfo(foo).linedefined + 1)
@@ -235,7 +312,7 @@ local f = x()
 assert(f() == 21 and x()() == 32 and x() == f)
 x = nil
 collectgarbage()
-assert(C[1] == nil)
+assert(C[1] == undef)
 assert(f() == 43 and f() == 53)
 
 
@@ -269,9 +346,13 @@ do
   local st, res = coroutine.resume(B)
   assert(st == true and res == false)
 
-  A = coroutine.wrap(function() return pcall(A, 1) end)
+  local X = false
+  A = coroutine.wrap(function()
+    local <toclose> _ = setmetatable({}, {__close = function () X = true end})
+    return pcall(A, 1)
+  end)
   st, res = A()
-  assert(not st and string.find(res, "non%-suspended"))
+  assert(not st and string.find(res, "non%-suspended") and X == true)
 end
 
 
@@ -389,18 +470,13 @@ else
     assert(coroutine.resume(c, 1, 2, 3))   -- start coroutine
     local n,v = debug.getlocal(c, 0, 1)    -- check its local
     assert(n == "a" and v == 1)
-    n,v = debug.getlocal(c, 0, -1)         -- check varargs
-    assert(v == 2)
-    n,v = debug.getlocal(c, 0, -2)
-    assert(v == 3)
     assert(debug.setlocal(c, 0, 1, 10))     -- test 'setlocal'
-    assert(debug.setlocal(c, 0, -2, 20))
     local t = debug.getinfo(c, 0)        -- test 'getinfo'
     assert(t.currentline == t.linedefined + 1)
     assert(not debug.getinfo(c, 1))      -- no other level
     assert(coroutine.resume(c))          -- run next line
     v = {coroutine.resume(c)}         -- finish coroutine
-    assert(v[1] == true and v[2] == 2 and v[3] == 20 and v[4] == nil)
+    assert(v[1] == true and v[2] == 2 and v[3] == 3 and v[4] == undef)
     assert(not coroutine.resume(c))
   end
 
@@ -540,31 +616,41 @@ print"+"
 
 print"testing yields inside metamethods"
 
+local function val(x)
+  if type(x) == "table" then return x.x else return x end
+end
+
 local mt = {
-  __eq = function(a,b) coroutine.yield(nil, "eq"); return a.x == b.x end,
-  __lt = function(a,b) coroutine.yield(nil, "lt"); return a.x < b.x end,
+  __eq = function(a,b) coroutine.yield(nil, "eq"); return val(a) == val(b) end,
+  __lt = function(a,b) coroutine.yield(nil, "lt"); return val(a) < val(b) end,
   __le = function(a,b) coroutine.yield(nil, "le"); return a - b <= 0 end,
-  __add = function(a,b) coroutine.yield(nil, "add"); return a.x + b.x end,
-  __sub = function(a,b) coroutine.yield(nil, "sub"); return a.x - b.x end,
-  __mod = function(a,b) coroutine.yield(nil, "mod"); return a.x % b.x end,
-  __unm = function(a,b) coroutine.yield(nil, "unm"); return -a.x end,
-  __bnot = function(a,b) coroutine.yield(nil, "bnot"); return ~a.x end,
-  __shl = function(a,b) coroutine.yield(nil, "shl"); return a.x << b.x end,
-  __shr = function(a,b) coroutine.yield(nil, "shr"); return a.x >> b.x end,
+  __add = function(a,b) coroutine.yield(nil, "add");
+                        return val(a) + val(b) end,
+  __sub = function(a,b) coroutine.yield(nil, "sub"); return val(a) - val(b) end,
+  __mul = function(a,b) coroutine.yield(nil, "mul"); return val(a) * val(b) end,
+  __div = function(a,b) coroutine.yield(nil, "div"); return val(a) / val(b) end,
+  __idiv = function(a,b) coroutine.yield(nil, "idiv");
+                         return val(a) // val(b) end,
+  __pow = function(a,b) coroutine.yield(nil, "pow"); return val(a) ^ val(b) end,
+  __mod = function(a,b) coroutine.yield(nil, "mod"); return val(a) % val(b) end,
+  __unm = function(a,b) coroutine.yield(nil, "unm"); return -val(a) end,
+  __bnot = function(a,b) coroutine.yield(nil, "bnot"); return ~val(a) end,
+  __shl = function(a,b) coroutine.yield(nil, "shl");
+                        return val(a) << val(b) end,
+  __shr = function(a,b) coroutine.yield(nil, "shr");
+                        return val(a) >> val(b) end,
   __band = function(a,b)
-             a = type(a) == "table" and a.x or a
-             b = type(b) == "table" and b.x or b
              coroutine.yield(nil, "band")
-             return a & b
+             return val(a) & val(b)
            end,
-  __bor = function(a,b) coroutine.yield(nil, "bor"); return a.x | b.x end,
-  __bxor = function(a,b) coroutine.yield(nil, "bxor"); return a.x ~ b.x end,
+  __bor = function(a,b) coroutine.yield(nil, "bor");
+                        return val(a) | val(b) end,
+  __bxor = function(a,b) coroutine.yield(nil, "bxor");
+                         return val(a) ~ val(b) end,
 
   __concat = function(a,b)
                coroutine.yield(nil, "concat");
-               a = type(a) == "table" and a.x or a
-               b = type(b) == "table" and b.x or b
-               return a .. b
+               return val(a) .. val(b)
              end,
   __index = function (t,k) coroutine.yield(nil, "idx"); return t.k[k] end,
   __newindex = function (t,k,v) coroutine.yield(nil, "nidx"); t.k[k] = v end,
@@ -585,7 +671,7 @@ local function run (f, t)
   local c = coroutine.wrap(f)
   while true do
     local res, stat = c()
-    if res then assert(t[i] == nil); return res, t end
+    if res then assert(t[i] == undef); return res, t end
     assert(stat == t[i])
     i = i + 1
   end
@@ -594,14 +680,29 @@ end
 
 assert(run(function () if (a>=b) then return '>=' else return '<' end end,
        {"le", "sub"}) == "<")
--- '<=' using '<'
-mt.__le = nil
 assert(run(function () if (a<=b) then return '<=' else return '>' end end,
-       {"lt"}) == "<=")
+       {"le", "sub"}) == "<=")
 assert(run(function () if (a==b) then return '==' else return '~=' end end,
        {"eq"}) == "~=")
 
 assert(run(function () return a & b + a end, {"add", "band"}) == 2)
+
+assert(run(function () return 1 + a end, {"add"}) == 11)
+assert(run(function () return a - 25 end, {"sub"}) == -15)
+assert(run(function () return 2 * a end, {"mul"}) == 20)
+assert(run(function () return a ^ 2 end, {"pow"}) == 100)
+assert(run(function () return a / 2 end, {"div"}) == 5)
+assert(run(function () return a % 6 end, {"mod"}) == 4)
+assert(run(function () return a // 3 end, {"idiv"}) == 3)
+
+assert(run(function () return a + b end, {"add"}) == 22)
+assert(run(function () return a - b end, {"sub"}) == -2)
+assert(run(function () return a * b end, {"mul"}) == 120)
+assert(run(function () return a ^ b end, {"pow"}) == 10^12)
+assert(run(function () return a / b end, {"div"}) == 10/12)
+assert(run(function () return a % b end, {"mod"}) == 10)
+assert(run(function () return a // b end, {"idiv"}) == 0)
+
 
 assert(run(function () return a % b end, {"mod"}) == 10)
 
@@ -610,6 +711,10 @@ assert(run(function () return a | b end, {"bor"}) == 10 | 12)
 assert(run(function () return a ~ b end, {"bxor"}) == 10 ~ 12)
 assert(run(function () return a << b end, {"shl"}) == 10 << 12)
 assert(run(function () return a >> b end, {"shr"}) == 10 >> 12)
+
+assert(run(function () return 10 & b end, {"band"}) == 10 & 12)
+assert(run(function () return a | 2 end, {"bor"}) == 10 | 2)
+assert(run(function () return a ~ 2 end, {"bxor"}) == 10 ~ 2)
 
 assert(run(function () return a..b end, {"concat"}) == "1012")
 
@@ -624,16 +729,14 @@ do   -- a few more tests for comparsion operators
   local mt1 = {
     __le = function (a,b)
       coroutine.yield(10)
-      return
-        (type(a) == "table" and a.x or a) <= (type(b) == "table" and b.x or b)
+      return (val(a) <= val(b))
     end,
     __lt = function (a,b)
       coroutine.yield(10)
-      return
-        (type(a) == "table" and a.x or a) < (type(b) == "table" and b.x or b)
+      return val(a) < val(b)
     end,
   }
-  local mt2 = { __lt = mt1.__lt }   -- no __le
+  local mt2 = { __lt = mt1.__lt, __le = mt1.__le }
 
   local function run (f)
     local co = coroutine.wrap(f)
@@ -842,9 +945,9 @@ co = coroutine.wrap(function (...) return
 end)
 
 local a = {co(3,4,6)}
-assert(a[1] == 6 and a[2] == nil)
-a = {co()}; assert(a[1] == nil and _G.status == "YIELD" and _G.ctx == 2)
-a = {co()}; assert(a[1] == nil and _G.status == "YIELD" and _G.ctx == 3)
+assert(a[1] == 6 and a[2] == undef)
+a = {co()}; assert(a[1] == undef and _G.status == "YIELD" and _G.ctx == 2)
+a = {co()}; assert(a[1] == undef and _G.status == "YIELD" and _G.ctx == 3)
 a = {co(7,8)};
 -- original arguments
 assert(type(a[1]) == 'string' and type(a[2]) == 'string' and

@@ -1,4 +1,4 @@
--- $Id: pm.lua,v 1.48 2016/11/07 13:11:28 roberto Exp $
+-- $Id: testes/pm.lua $
 -- See Copyright Notice in file all.lua
 
 print('testing pattern matching')
@@ -109,7 +109,7 @@ local function range (i, j)
   end
 end
 
-local abc = string.char(range(0, 255));
+local abc = string.char(range(0, 127)) .. string.char(range(128, 255));
 
 assert(string.len(abc) == 256)
 
@@ -228,7 +228,7 @@ assert(t[1] == "first" and t[2] == "second" and t[3] == "word" and t.n == 3)
 t = {n=0}
 assert(string.gsub("first second word", "%w+",
          function (w) t.n=t.n+1; t[t.n] = w end, 2) == "first second word")
-assert(t[1] == "first" and t[2] == "second" and t[3] == nil)
+assert(t[1] == "first" and t[2] == "second" and t[3] == undef)
 
 checkerror("invalid replacement value %(a table%)",
             string.gsub, "alo", ".", {a = {}})
@@ -237,18 +237,6 @@ checkerror("invalid capture index %%0", string.gsub, "alo", "(%0)", "a")
 checkerror("invalid capture index %%1", string.gsub, "alo", "(%1)", "a")
 checkerror("invalid use of '%%'", string.gsub, "alo", ".", "%x")
 
--- bug since 2.5 (C-stack overflow)
-do
-  local function f (size)
-    local s = string.rep("a", size)
-    local p = string.rep(".?", size)
-    return pcall(string.match, s, p)
-  end
-  local r, m = f(80)
-  assert(r and #m == 80)
-  r, m = f(200000)
-  assert(not r and string.find(m, "too complex"))
-end
 
 if not _soft then
   print("big strings")
@@ -307,6 +295,35 @@ end
 a = 0
 for k,v in pairs(t) do assert(k+1 == v+0); a=a+1 end
 assert(a == 3)
+
+
+do   -- init parameter in gmatch
+  local s = 0
+  for k in string.gmatch("10 20 30", "%d+", 3) do
+    s = s + tonumber(k)
+  end
+  assert(s == 50)
+
+  s = 0
+  for k in string.gmatch("11 21 31", "%d+", -4) do
+    s = s + tonumber(k)
+  end
+  assert(s == 32)
+
+  -- there is an empty string at the end of the subject
+  s = 0
+  for k in string.gmatch("11 21 31", "%w*", 9) do
+    s = s + 1
+  end
+  assert(s == 1)
+
+  -- there are no empty strings after the end of the subject
+  s = 0
+  for k in string.gmatch("11 21 31", "%w*", 10) do
+    s = s + 1
+  end
+  assert(s == 0)
+end
 
 
 -- tests for `%f' (`frontiers')
@@ -369,6 +386,36 @@ assert(string.match("abc\0\0\0", "%\0%\0?") == "\0\0")
 -- magic char after \0
 assert(string.find("abc\0\0","\0.") == 4)
 assert(string.find("abcx\0\0abc\0abc","x\0\0abc\0a.") == 4)
+
+
+do   -- test reuse of original string in gsub
+  local s = string.rep("a", 100)
+  local r = string.gsub(s, "b", "c")   -- no match
+  assert(string.format("%p", s) == string.format("%p", r))
+
+  r = string.gsub(s, ".", {x = "y"})   -- no substitutions
+  assert(string.format("%p", s) == string.format("%p", r))
+
+  local count = 0
+  r = string.gsub(s, ".", function (x)
+                            assert(x == "a")
+                            count = count + 1
+                            return nil    -- no substitution
+                          end)
+  r = string.gsub(r, ".", {b = 'x'})   -- "a" is not a key; no subst.
+  assert(count == 100)
+  assert(string.format("%p", s) == string.format("%p", r))
+
+  count = 0
+  r = string.gsub(s, ".", function (x)
+                            assert(x == "a")
+                            count = count + 1
+                            return x    -- substitution...
+                          end)
+  assert(count == 100)
+  -- no reuse in this case
+  assert(r == s and string.format("%p", s) ~= string.format("%p", r))
+end
 
 print('OK')
 

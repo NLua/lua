@@ -1,12 +1,12 @@
--- $Id: math.lua,v 1.78 2016/11/07 13:11:28 roberto Exp $
+-- $Id: testes/math.lua $
 -- See Copyright Notice in file all.lua
 
 print("testing numbers and math lib")
 
-local minint = math.mininteger
-local maxint = math.maxinteger
+local <const> minint = math.mininteger
+local <const> maxint = math.maxinteger
 
-local intbits = math.floor(math.log(maxint, 2) + 0.5) + 1
+local <const> intbits = math.floor(math.log(maxint, 2) + 0.5) + 1
 assert((1 << intbits) == 0)
 
 assert(minint == 1 << (intbits - 1))
@@ -139,6 +139,17 @@ assert(-1 // 0.0 == -1/0)
 assert(eqT(3.5 // 1.5, 2.0))
 assert(eqT(3.5 // -1.5, -3.0))
 
+do   -- tests for different kinds of opcodes
+  local x, y 
+  x = 1; assert(x // 0.0 == 1/0)
+  x = 1.0; assert(x // 0 == 1/0)
+  x = 3.5; assert(eqT(x // 1, 3.0))
+  assert(eqT(x // -1, -4.0))
+
+  x = 3.5; y = 1.5; assert(eqT(x // y, 2.0))
+  x = 3.5; y = -1.5; assert(eqT(x // y, -3.0))
+end
+
 assert(maxint // maxint == 1)
 assert(maxint // 1 == maxint)
 assert((maxint - 1) // maxint == 0)
@@ -267,6 +278,8 @@ do
   assert(not (NaN < maxint))
   assert(not (minint <= NaN))
   assert(not (minint < NaN))
+  assert(not (4 <= NaN))
+  assert(not (4 < NaN))
 end
 
 
@@ -279,7 +292,7 @@ checkcompt(msgf2i, "return 2.3 >> 0")
 checkcompt(msgf2i, ("return 2.0^%d & 1"):format(intbits - 1))
 checkcompt("field 'huge'", "return math.huge << 1")
 checkcompt(msgf2i, ("return 1 | 2.0^%d"):format(intbits - 1))
-checkcompt(msgf2i, "return 2.3 ~ '0.0'")
+checkcompt(msgf2i, "return 2.3 ~ 0.0")
 
 
 -- testing overflow errors when converting from float to integer (runtime)
@@ -528,8 +541,72 @@ assert(eqT(-4 % 3, 2))
 assert(eqT(4 % -3, -2))
 assert(eqT(-4.0 % 3, 2.0))
 assert(eqT(4 % -3.0, -2.0))
+assert(eqT(4 % -5, -1))
+assert(eqT(4 % -5.0, -1.0))
+assert(eqT(4 % 5, 4))
+assert(eqT(4 % 5.0, 4.0))
+assert(eqT(-4 % -5, -4))
+assert(eqT(-4 % -5.0, -4.0))
+assert(eqT(-4 % 5, 1))
+assert(eqT(-4 % 5.0, 1.0))
+assert(eqT(4.25 % 4, 0.25))
+assert(eqT(10.0 % 2, 0.0))
+assert(eqT(-10.0 % 2, 0.0))
+assert(eqT(-10.0 % -2, 0.0))
 assert(math.pi - math.pi % 1 == 3)
 assert(math.pi - math.pi % 0.001 == 3.141)
+
+do   -- very small numbers
+  local i, j = 0, 20000
+  while i < j do
+    local m = (i + j) // 2
+    if 10^-m > 0 then
+      i = m + 1
+    else
+      j = m
+    end
+  end
+  -- 'i' is the smallest possible ten-exponent
+  local b = 10^-(i - (i // 10))   -- a very small number
+  assert(b > 0 and b * b == 0)
+  local delta = b / 1000
+  assert(eq((2.1 * b) % (2 * b), (0.1 * b), delta))
+  assert(eq((-2.1 * b) % (2 * b), (2 * b) - (0.1 * b), delta))
+  assert(eq((2.1 * b) % (-2 * b), (0.1 * b) - (2 * b), delta))
+  assert(eq((-2.1 * b) % (-2 * b), (-0.1 * b), delta))
+end
+
+
+-- basic consistency between integer modulo and float modulo
+for i = -10, 10 do
+  for j = -10, 10 do
+    if j ~= 0 then
+      assert((i + 0.0) % j == i % j)
+    end
+  end
+end
+
+for i = 0, 10 do
+  for j = -10, 10 do
+    if j ~= 0 then
+      assert((2^i) % j == (1 << i) % j)
+    end
+  end
+end
+
+do    -- precision of module for large numbers
+  local i = 10
+  while (1 << i) > 0 do
+    assert((1 << i) % 3 == i % 2 + 1)
+    i = i + 1
+  end
+
+  i = 10
+  while 2^i < math.huge do
+    assert(2^i % 3 == i % 2 + 1)
+    i = i + 1
+  end
+end
 
 assert(eqT(minint % minint, 0))
 assert(eqT(maxint % maxint, 0))
@@ -712,10 +789,10 @@ do
   assert(NaN ~= NaN1 and not (NaN <= NaN1) and not (NaN1 <= NaN))
   local a = {}
   assert(not pcall(rawset, a, NaN, 1))
-  assert(a[NaN] == nil)
+  assert(a[NaN] == undef)
   a[1] = 1
   assert(not pcall(rawset, a, NaN, 1))
-  assert(a[NaN] == nil)
+  assert(a[NaN] == undef)
   -- strings with same binary representation as 0.0 (might create problems
   -- for constant manipulation in the pre-compiler)
   local a1, a2, a3, a4, a5 = 0, 0, "\0\0\0\0\0\0\0\0", 0, "\0\0\0\0\0\0\0\0"
@@ -725,100 +802,207 @@ end
 
 
 print("testing 'math.random'")
-math.randomseed(0)
+
+local random, max, min = math.random, math.max, math.min
+
+local function testnear (val, ref, tol)
+  return (math.abs(val - ref) < ref * tol)
+end
+
+
+-- low-level!! For the current implementation of random in Lua,
+-- the first call after seed 1007 should return 0x7a7040a5a323c9d6
+do
+  -- all computations assume at most 32-bit integers
+  local h = 0x7a7040a5   -- higher half
+  local l = 0xa323c9d6   -- lower half
+
+  math.randomseed(1007)
+  -- get the low 'intbits' of the 64-bit expected result
+  local res = (h << 32 | l) & ~(~0 << intbits)
+  assert(random(0) == res)
+
+  math.randomseed(1007, 0)
+  -- using higher bits to generate random floats; (the '% 2^32' converts
+  -- 32-bit integers to floats as unsigned)
+  local res
+  if floatbits <= 32 then
+    -- get all bits from the higher half
+    res = (h >> (32 - floatbits)) % 2^32
+  else
+    -- get 32 bits from the higher half and the rest from the lower half
+    res = (h % 2^32) * 2^(floatbits - 32) + ((l >> (64 - floatbits)) % 2^32)
+  end
+  local rand = random()
+  assert(eq(rand, 0x0.7a7040a5a323c9d6, 2^-floatbits))
+  assert(rand * 2^floatbits == res)
+end
+
+math.randomseed()
 
 do   -- test random for floats
-  local max = -math.huge
-  local min = math.huge
-  for i = 0, 20000 do
-    local t = math.random()
+  local randbits = math.min(floatbits, 64)   -- at most 64 random bits
+  local mult = 2^randbits      -- to make random float into an integral
+  local counts = {}    -- counts for bits
+  for i = 1, randbits do counts[i] = 0 end
+  local up = -math.huge
+  local low = math.huge
+  local rounds = 100 * randbits   -- 100 times for each bit
+  local totalrounds = 0
+  ::doagain::   -- will repeat test until we get good statistics
+  for i = 0, rounds do
+    local t = random()
     assert(0 <= t and t < 1)
-    max = math.max(max, t)
-    min = math.min(min, t)
-    if eq(max, 1, 0.001) and eq(min, 0, 0.001) then
-      goto ok
+    up = max(up, t)
+    low = min(low, t)
+    assert(t * mult % 1 == 0)    -- no extra bits
+    local bit = i % randbits     -- bit to be tested
+    if (t * 2^bit) % 1 >= 0.5 then    -- is bit set?
+      counts[bit + 1] = counts[bit + 1] + 1   -- increment its count
     end
   end
-  -- loop ended without satisfing condition
-  assert(false)
- ::ok::
+  totalrounds = totalrounds + rounds
+  if not (eq(up, 1, 0.001) and eq(low, 0, 0.001)) then
+    goto doagain
+  end
+  -- all bit counts should be near 50%
+  local expected = (totalrounds / randbits / 2)
+  for i = 1, randbits do
+    if not testnear(counts[i], expected, 0.10) then
+      goto doagain
+    end
+  end
+  print(string.format("float random range in %d calls: [%f, %f]",
+                      totalrounds, low, up))
+end
+
+
+do   -- test random for full integers
+  local up = 0
+  local low = 0
+  local counts = {}    -- counts for bits
+  for i = 1, intbits do counts[i] = 0 end
+  local rounds = 100 * intbits   -- 100 times for each bit
+  local totalrounds = 0
+  ::doagain::   -- will repeat test until we get good statistics
+  for i = 0, rounds do
+    local t = random(0)
+    up = max(up, t)
+    low = min(low, t)
+    local bit = i % intbits     -- bit to be tested
+    -- increment its count if it is set
+    counts[bit + 1] = counts[bit + 1] + ((t >> bit) & 1)
+  end
+  totalrounds = totalrounds + rounds
+  local lim = maxint >> 10
+  if not (maxint - up < lim and low - minint < lim) then
+    goto doagain
+  end
+  -- all bit counts should be near 50%
+  local expected = (totalrounds / intbits / 2)
+  for i = 1, intbits do
+    if not testnear(counts[i], expected, 0.10) then
+      goto doagain
+    end
+  end
+  print(string.format(
+     "integer random range in %d calls: [minint + %.0fppm, maxint - %.0fppm]",
+      totalrounds, (minint - low) / minint * 1e6,
+                   (maxint - up) / maxint * 1e6))
 end
 
 do
-  local function aux (p, lim)   -- test random for small intervals
-    local x1, x2
-    if #p == 1 then x1 = 1; x2 = p[1]
-    else x1 = p[1]; x2 = p[2]
+  -- test distribution for a dice
+  local count = {0, 0, 0, 0, 0, 0}
+  local rep = 200
+  local totalrep = 0
+  ::doagain::
+  for i = 1, rep * 6 do
+    local r = random(6)
+    count[r] = count[r] + 1
+  end
+  totalrep = totalrep + rep
+  for i = 1, 6 do
+    if not testnear(count[i], totalrep, 0.05) then
+      goto doagain
     end
+  end
+end
+
+do
+  local function aux (x1, x2)     -- test random for small intervals
     local mark = {}; local count = 0   -- to check that all values appeared
-    for i = 0, lim or 2000 do
-      local t = math.random(table.unpack(p))
+    while true do
+      local t = random(x1, x2)
       assert(x1 <= t and t <= x2)
       if not mark[t] then  -- new value
         mark[t] = true
         count = count + 1
-      end
-      if count == x2 - x1 + 1 then   -- all values appeared; OK
-        goto ok
+        if count == x2 - x1 + 1 then   -- all values appeared; OK
+          goto ok
+        end
       end
     end
-    -- loop ended without satisfing condition
-    assert(false)
    ::ok::
   end
 
-  aux({-10,0})
-  aux({6})
-  aux({-10, 10})
-  aux({minint, minint})
-  aux({maxint, maxint})
-  aux({minint, minint + 9})
-  aux({maxint - 3, maxint})
+  aux(-10,0)
+  aux(1, 6)
+  aux(1, 2)
+  aux(1, 32)
+  aux(-10, 10)
+  aux(-10,-10)   -- unit set
+  aux(minint, minint)   -- unit set
+  aux(maxint, maxint)   -- unit set
+  aux(minint, minint + 9)
+  aux(maxint - 3, maxint)
 end
 
 do
   local function aux(p1, p2)       -- test random for large intervals
     local max = minint
     local min = maxint
-    local n = 200
+    local n = 100
     local mark = {}; local count = 0   -- to count how many different values
+    ::doagain::
     for _ = 1, n do
-      local t = math.random(p1, p2)
-      max = math.max(max, t)
-      min = math.min(min, t)
+      local t = random(p1, p2)
       if not mark[t] then  -- new value
+        assert(p1 <= t and t <= p2)
+        max = math.max(max, t)
+        min = math.min(min, t)
         mark[t] = true
         count = count + 1
       end
     end
     -- at least 80% of values are different
-    assert(count >= n * 0.8)
+    if not (count >= n * 0.8) then
+      goto doagain
+    end
     -- min and max not too far from formal min and max
-    local diff = (p2 - p1) // 8
-    assert(min < p1 + diff and max > p2 - diff)
+    local diff = (p2 - p1) >> 4
+    if not (min < p1 + diff and max > p2 - diff) then
+      goto doagain
+    end
   end
   aux(0, maxint)
   aux(1, maxint)
   aux(minint, -1)
   aux(minint // 2, maxint // 2)
+  aux(minint, maxint)
+  aux(minint + 1, maxint)
+  aux(minint, maxint - 1)
+  aux(0, 1 << (intbits - 5))
 end
 
-for i=1,100 do
-  assert(math.random(maxint) > 0)
-  assert(math.random(minint, -1) < 0)
-end
 
-assert(not pcall(math.random, 1, 2, 3))    -- too many arguments
+assert(not pcall(random, 1, 2, 3))    -- too many arguments
 
 -- empty interval
-assert(not pcall(math.random, minint + 1, minint))
-assert(not pcall(math.random, maxint, maxint - 1))
-assert(not pcall(math.random, maxint, minint))
+assert(not pcall(random, minint + 1, minint))
+assert(not pcall(random, maxint, maxint - 1))
+assert(not pcall(random, maxint, minint))
 
--- interval too large
-assert(not pcall(math.random, minint, 0))
-assert(not pcall(math.random, -1, maxint))
-assert(not pcall(math.random, minint // 2, maxint // 2 + 1))
 
 
 print('OK')

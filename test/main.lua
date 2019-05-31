@@ -1,5 +1,5 @@
 # testing special comment on first line
--- $Id: main.lua,v 1.65 2016/11/07 13:11:28 roberto Exp $
+-- $Id: testes/main.lua $
 -- See Copyright Notice in file all.lua
 
 -- most (all?) tests here assume a reasonable "Unix-like" shell
@@ -13,7 +13,7 @@ print ("testing stand-alone interpreter")
 
 assert(os.execute())   -- machine has a system command
 
-local arg = arg or _ARG
+local arg = arg or ARG
 
 local prog = os.tmpname()
 local otherprog = os.tmpname()
@@ -105,7 +105,7 @@ RUN('env LUA_INIT= LUA_PATH=x lua %s > %s', prog, out)
 checkout("x\n")
 
 -- test LUA_PATH_version
-RUN('env LUA_INIT= LUA_PATH_5_3=y LUA_PATH=x lua %s > %s', prog, out)
+RUN('env LUA_INIT= LUA_PATH_5_4=y LUA_PATH=x lua %s > %s', prog, out)
 checkout("y\n")
 
 -- test LUA_CPATH
@@ -114,7 +114,7 @@ RUN('env LUA_INIT= LUA_CPATH=xuxu lua %s > %s', prog, out)
 checkout("xuxu\n")
 
 -- test LUA_CPATH_version
-RUN('env LUA_INIT= LUA_CPATH_5_3=yacc LUA_CPATH=x lua %s > %s', prog, out)
+RUN('env LUA_INIT= LUA_CPATH_5_4=yacc LUA_CPATH=x lua %s > %s', prog, out)
 checkout("yacc\n")
 
 -- test LUA_INIT (and its access to 'arg' table)
@@ -124,7 +124,7 @@ checkout("3.2\n")
 
 -- test LUA_INIT_version
 prepfile("print(X)")
-RUN('env LUA_INIT_5_3="X=10" LUA_INIT="X=3" lua %s > %s', prog, out)
+RUN('env LUA_INIT_5_4="X=10" LUA_INIT="X=3" lua %s > %s', prog, out)
 checkout("10\n")
 
 -- test LUA_INIT for files
@@ -142,12 +142,18 @@ do
   prepfile("print(package.path, package.cpath)")
   RUN('env LUA_INIT="error(10)" LUA_PATH=xxx LUA_CPATH=xxx lua -E %s > %s',
        prog, out)
+  local output = getoutput()
+  defaultpath = string.match(output, "^(.-)\t")
+  defaultCpath = string.match(output, "\t(.-)$")
+
+  -- running with an empty environment
+  RUN('env -i lua %s > %s', prog, out)
   local out = getoutput()
-  defaultpath = string.match(out, "^(.-)\t")
-  defaultCpath = string.match(out, "\t(.-)$")
+  assert(defaultpath == string.match(output, "^(.-)\t"))
+  assert(defaultCpath == string.match(output, "\t(.-)$"))
 end
 
--- paths did not changed
+-- paths did not change
 assert(not string.find(defaultpath, "xxx") and
        string.find(defaultpath, "lua") and
        not string.find(defaultCpath, "xxx") and
@@ -160,15 +166,20 @@ local function convert (p)
   RUN('env LUA_PATH="%s" lua %s > %s', p, prog, out)
   local expected = getoutput()
   expected = string.sub(expected, 1, -2)   -- cut final end of line
-  assert(string.gsub(p, ";;", ";"..defaultpath..";") == expected)
+  if string.find(p, ";;") then
+    p = string.gsub(p, ";;", ";"..defaultpath..";")
+    p = string.gsub(p, "^;", "")   -- remove ';' at the beginning
+    p = string.gsub(p, ";$", "")   -- remove ';' at the end
+  end
+  assert(p == expected)
 end
 
 convert(";")
 convert(";;")
-convert(";;;")
-convert(";;;;")
-convert(";;;;;")
-convert(";;a;;;bc")
+convert("a;;b")
+convert(";;b")
+convert("a;;")
+convert("a;b;;c")
 
 
 -- test -l over multiple libraries
@@ -182,7 +193,7 @@ local a = [[
   assert(#arg == 3 and arg[1] == 'a' and
          arg[2] == 'b' and arg[3] == 'c')
   assert(arg[-1] == '--' and arg[-2] == "-e " and arg[-3] == '%s')
-  assert(arg[4] == nil and arg[-4] == nil)
+  assert(arg[4] == undef and arg[-4] == undef)
   local a, b, c = ...
   assert(... == 'a' and a == 'a' and b == 'b' and c == 'c')
 ]]
@@ -254,15 +265,15 @@ NoRun("error object is a table value", [[lua %s]], prog)
 
 
 -- chunk broken in many lines
-s = [=[ -- 
-function f ( x ) 
+s = [=[ --
+function f ( x )
   local a = [[
 xuxu
 ]]
   local b = "\
 xuxu\n"
   if x == 11 then return 1 + 12 , 2 + 20 end  --[[ test multiple returns ]]
-  return x + 1 
+  return x + 1
   --\\
 end
 return( f( 100 ) )
@@ -272,10 +283,10 @@ s = string.gsub(s, ' ', '\n\n')   -- change all spaces for newlines
 prepfile(s)
 RUN([[lua -e"_PROMPT='' _PROMPT2=''" -i < %s > %s]], prog, out)
 checkprogout("101\n13\t22\n\n")
-  
+
 prepfile[[#comment in 1st line without \n at the end]]
 RUN('lua %s', prog)
-  
+
 prepfile[[#test line number when file starts with comment line
 debug = require"debug"
 print(debug.getinfo(1).currentline)
@@ -306,6 +317,20 @@ NoRun("", "lua %s", prog)   -- no message
 prepfile("os.exit(false, true)")
 NoRun("", "lua %s", prog)   -- no message
 
+
+-- to-be-closed variables in main chunk
+prepfile[[
+  local <toclose> x = function (err)
+    assert(err == 120)
+    print("Ok")
+  end
+  local <toclose> e1 = function () error(120) end
+  os.exit(true, true)
+]]
+RUN('lua %s > %s', prog, out)
+checkprogout("Ok")
+
+
 -- remove temporary files
 assert(os.remove(prog))
 assert(os.remove(otherprog))
@@ -332,7 +357,7 @@ print('testing Ctrl C')
 do
   -- interrupt a script
   local function kill (pid)
-    return os.execute(string.format('kill -INT %d 2> /dev/null', pid))
+    return os.execute(string.format('kill -INT %s 2> /dev/null', pid))
   end
 
   -- function to run a script in background, returning its output file

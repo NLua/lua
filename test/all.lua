@@ -1,17 +1,17 @@
 #!../lua
--- $Id: all.lua,v 1.95 2016/11/07 13:11:28 roberto Exp $
+-- $Id: testes/all.lua $
 -- See Copyright Notice at the end of this file
 
 
-local version = "Lua 5.3"
+local version = "Lua 5.4"
 if _VERSION ~= version then
-  io.stderr:write("\nThis test suite is for ", version, ", not for ", _VERSION,
-    "\nExiting tests\n")
+  warn(string.format(
+   "This test suite is for %s, not for %s\nExiting tests", version, _VERSION))
   return
 end
 
 
-_G._ARG = arg   -- save arg for other tests
+_G.ARG = arg   -- save arg for other tests
 
 
 -- next variables control the execution of some tests
@@ -36,6 +36,9 @@ end
 
 -- tests should require debug when needed
 debug = nil
+
+require"bwcoercion"
+
 
 if usertests then
   T = nil    -- no "internal" tests for user tests
@@ -159,7 +162,7 @@ olddofile('strings.lua')
 olddofile('literals.lua')
 dofile('tpack.lua')
 assert(dofile('attrib.lua') == 27)
-
+dofile('gengc.lua')
 assert(dofile('locals.lua') == 5)
 dofile('constructs.lua')
 dofile('code.lua', true)
@@ -169,6 +172,7 @@ if not _G._soft then
   assert(f() == 'b')
   assert(f() == 'a')
 end
+dofile('cstack.lua')
 dofile('nextvar.lua')
 dofile('pm.lua')
 dofile('utf8.lua')
@@ -186,12 +190,16 @@ assert(dofile('verybig.lua', true) == 10); collectgarbage()
 dofile('files.lua')
 
 if #msgs > 0 then
-  print("\ntests not performed:")
+  warn("#tests not performed:", true)
   for i=1,#msgs do
-    print(msgs[i])
+    warn("\n  ", true); warn(msgs[i], true)
   end
-  print()
+  warn("\n")
 end
+
+print("(there should be two warnings now)")
+warn("#This is ", true); warn("an expected", true); warn(" warning")
+warn("#This is", true); warn(" another one")
 
 -- no test module should define 'debug'
 assert(debug == nil)
@@ -231,7 +239,7 @@ end
 print('cleaning all!!!!')
 for n in pairs(_G) do
   if not ({___Glob = 1, tostring = 1})[n] then
-    _G[n] = nil
+    _G[n] = undef
   end
 end
 

@@ -1,4 +1,4 @@
--- $Id: nextvar.lua,v 1.79 2016/11/07 13:11:28 roberto Exp $
+-- $Id: testes/nextvar.lua $
 -- See Copyright Notice in file all.lua
 
 print('testing tables, next, and for')
@@ -13,7 +13,7 @@ local a = {}
 
 -- make sure table has lots of space in hash part
 for i=1,100 do a[i.."+"] = true end
-for i=1,100 do a[i.."+"] = nil end
+for i=1,100 do a[i.."+"] = undef end
 -- fill hash part with numeric indices testing size operator
 for i=1,100 do
   a[i] = true
@@ -76,7 +76,7 @@ while a < lim do
   a = math.ceil(a*1.3)
 end
 
- 
+
 local function check (t, na, nh)
   local a, h = T.querytab(t)
   if a ~= na or h ~= nh then
@@ -100,7 +100,7 @@ local s = 'return {'
 for i=1,lim do
   s = s..i..','
   local s = s
-  for k=0,lim do 
+  for k=0,lim do
     local t = load(s..'}', '')()
     assert(#t == i)
     check(t, fb(i), mp2(k))
@@ -145,14 +145,14 @@ a = {}
 for i=1,16 do a[i] = i end
 check(a, 16, 0)
 do
-  for i=1,11 do a[i] = nil end
-  for i=30,50 do a[i] = nil end   -- force a rehash (?)
-  check(a, 0, 8)   -- only 5 elements in the table
+  for i=1,11 do a[i] = undef end
+  for i=30,50 do a[i] = true; a[i] = undef end   -- force a rehash (?)
+  check(a, 0, 8)   -- 5 elements in the table
   a[10] = 1
-  for i=30,50 do a[i] = nil end   -- force a rehash (?)
+  for i=30,50 do a[i] = true; a[i] = undef end   -- force a rehash (?)
   check(a, 0, 8)   -- only 6 elements in the table
-  for i=1,14 do a[i] = nil end
-  for i=18,50 do a[i] = nil end   -- force a rehash (?)
+  for i=1,14 do a[i] = true; a[i] = undef end
+  for i=18,50 do a[i] = true; a[i] = undef end   -- force a rehash (?)
   check(a, 0, 4)   -- only 2 elements ([15] and [16])
 end
 
@@ -177,15 +177,31 @@ end
 local a = {}
 for i=1,lim do a[i] = true; foo(i, table.unpack(a)) end
 
+
+-- Table length with limit smaller than maximum value at array
+local a = {}
+for i = 1,64 do a[i] = true end    -- make its array size 64
+for i = 1,64 do a[i] = nil end     -- erase all elements
+assert(T.querytab(a) == 64)    -- array part has 64 elements
+a[32] = true; a[48] = true;    -- binary search will find these ones
+a[51] = true                   -- binary search will miss this one
+assert(#a == 48)               -- this will set the limit
+assert(select(4, T.querytab(a)) == 48)  -- this is the limit now
+a[50] = true                   -- this will set a new limit
+assert(select(4, T.querytab(a)) == 50)  -- this is the limit now
+-- but the size is larger (and still inside the array part)
+assert(#a == 51)
+
 end  --]
 
 
--- test size operation on empty tables
+-- test size operation on tables with nils
 assert(#{} == 0)
 assert(#{nil} == 0)
 assert(#{nil, nil} == 0)
 assert(#{nil, nil, nil} == 0)
 assert(#{nil, nil, nil, nil} == 0)
+assert(#{1, 2, 3, nil, nil} == 3)
 print'+'
 
 
@@ -203,7 +219,7 @@ local function find (name)
   while 1 do
     n,v = next(_G, n)
     if not n then return nofind end
-    assert(v ~= nil)
+    assert(_G[n] ~= undef)
     if n == name then return v end
   end
 end
@@ -221,7 +237,7 @@ assert(_G["print"]==find("print"))
 assert(assert==find1("assert"))
 assert(nofind==find("return"))
 assert(not find1("return"))
-_G["ret" .. "urn"] = nil
+_G["ret" .. "urn"] = undef
 assert(nofind==find("return"))
 _G["xxx"] = 1
 assert(xxx==find("xxx"))
@@ -256,14 +272,14 @@ do   -- clear global table
   for n,v in pairs(a) do
     if not package.loaded[n] and type(v) ~= "function" and
        not string.find(n, "^[%u_]") then
-     _G[n] = nil
+      _G[n] = undef
     end
     collectgarbage()
   end
 end
 
 
--- 
+--
 
 local function checknext (a)
   local b = {}
@@ -280,7 +296,6 @@ checknext{1,2,3,4,5,x=1,y=2,z=3}
 
 assert(#{} == 0)
 assert(#{[-1] = 2} == 0)
-assert(#{1,2,3,nil,nil} == 3)
 for i=0,40 do
   local a = {}
   for j=1,i do a[j]=j end
@@ -312,6 +327,27 @@ assert(a[#a])
 print('+')
 
 
+do    -- testing 'next' with all kinds of keys
+  local a = {
+    [1] = 1,                        -- integer
+    [1.1] = 2,                      -- float
+    ['x'] = 3,                      -- short string
+    [string.rep('x', 1000)] = 4,    -- long string
+    [print] = 5,                    -- C function
+    [checkerror] = 6,               -- Lua function
+    [coroutine.running()] = 7,      -- thread
+    [true] = 8,                     -- boolean
+    [io.stdin] = 9,                 -- userdata
+    [{}] = 10,                      -- table
+  }
+  local b = {}; for i = 1, 10 do b[i] = true end
+  for k, v in pairs(a) do
+    assert(b[v]); b[v] = undef
+  end
+  assert(next(b) == nil)        -- 'b' now is empty
+end
+
+
 -- erasing values
 local t = {[{1}] = 1, [{2}] = 2, [string.rep("x ", 4)] = 3,
            [100.3] = 4, [4] = 5}
@@ -320,9 +356,9 @@ local n = 0
 for k, v in pairs( t ) do
   n = n+1
   assert(t[k] == v)
-  t[k] = nil
+  t[k] = undef
   collectgarbage()
-  assert(t[k] == nil)
+  assert(t[k] == undef)
 end
 assert(n == 5)
 
@@ -333,6 +369,8 @@ local function test (a)
   table.insert(a, 1, -1); table.insert(a, 40);
   table.insert(a, #a+1, 50)
   table.insert(a, 2, -2)
+  assert(a[2] ~= undef)
+  assert(a["2"] == undef)
   assert(not pcall(table.insert, a, 0, 20));
   assert(not pcall(table.insert, a, #a + 2, 20));
   assert(table.remove(a,1) == -1)
@@ -359,7 +397,7 @@ test(a)
 assert(#a == 0 and table.remove(a) == nil and a[-1] == "ban")
 
 a = {[0] = "ban"}
-assert(#a == 0 and table.remove(a) == "ban" and a[0] == nil)
+assert(#a == 0 and table.remove(a) == "ban" and a[0] == undef)
 
 table.insert(a, 1, 10); table.insert(a, 1, 20); table.insert(a, 1, -1)
 assert(table.remove(a) == 10)
@@ -391,7 +429,7 @@ do   -- testing table library with metamethods
     for i = 1, 10 do
       table.insert(proxy, 1, i)
     end
-    assert(#proxy == 10 and #t == 10)
+    assert(#proxy == 10 and #t == 10 and proxy[1] ~= undef)
     for i = 1, 10 do
       assert(t[i] == 11 - i)
     end
@@ -462,7 +500,7 @@ else --[
   mt.__newindex = nil
   mt.__len = nil
   local tab2 = {}
-  local u2 = T.newuserdata(0) 
+  local u2 = T.newuserdata(0)
   debug.setmetatable(u2, {__newindex = function (_, k, v) tab2[k] = v end})
   table.move(u, 1, 4, 1, u2)
   assert(#tab2 == 4 and tab2[1] == tab[1] and tab2[4] == tab[4])
@@ -473,7 +511,7 @@ print('+')
 
 a = {}
 for i=1,1000 do
-  a[i] = i; a[i-1] = nil
+  a[i] = i; a[i - 1] = undef
 end
 assert(next(a,nil) == 1000 and next(a,1000) == nil)
 
@@ -504,6 +542,12 @@ do
   a = 0; for i=1.0, 0.99999, 1 do a=a+1 end; assert(a==0)
   a = 0; for i=99999, 1e5, -1.0 do a=a+1 end; assert(a==0)
   a = 0; for i=1.0, 0.99999, -1 do a=a+1 end; assert(a==1)
+end
+
+do   -- changing the control variable
+  local a
+  a = 0; for i = 1, 10 do a = a + 1; i = "x" end; assert(a == 10)
+  a = 0; for i = 10.0, 1, -1 do a = a + 1; i = "x" end; assert(a == 10)
 end
 
 -- conversion
@@ -563,6 +607,69 @@ do  -- checking types
 
 end
 
+
+do   -- testing other strange cases for numeric 'for'
+
+  local function checkfor (from, to, step, t)
+    local c = 0
+    for i = from, to, step do
+      c = c + 1
+      assert(i == t[c])
+    end
+    assert(c == #t)
+  end
+
+  local maxi = math.maxinteger
+  local mini = math.mininteger
+
+  checkfor(mini, maxi, maxi, {mini, -1, maxi - 1})
+
+  checkfor(mini, math.huge, maxi, {mini, -1, maxi - 1})
+
+  checkfor(maxi, mini, mini, {maxi, -1})
+
+  checkfor(maxi, mini, -maxi, {maxi, 0, -maxi})
+
+  checkfor(maxi, -math.huge, mini, {maxi, -1})
+
+  checkfor(maxi, mini, 1, {})
+  checkfor(mini, maxi, -1, {})
+
+  checkfor(maxi - 6, maxi, 3, {maxi - 6, maxi - 3, maxi})
+  checkfor(mini + 4, mini, -2, {mini + 4, mini + 2, mini})
+
+  local step = maxi // 10
+  local c = mini
+  for i = mini, maxi, step do
+    assert(i == c)
+    c = c + step
+  end
+
+  c = maxi
+  for i = maxi, mini, -step do
+    assert(i == c)
+    c = c - step
+  end
+
+  checkfor(maxi, maxi, maxi, {maxi})
+  checkfor(maxi, maxi, mini, {maxi})
+  checkfor(mini, mini, maxi, {mini})
+  checkfor(mini, mini, mini, {mini})
+end
+
+
+checkerror("'for' step is zero", function ()
+  for i = 1, 10, 0 do end
+end)
+
+checkerror("'for' step is zero", function ()
+  for i = 1, -10, 0 do end
+end)
+
+checkerror("'for' step is zero", function ()
+  for i = 1.0, -10, 0.0 do end
+end)
+
 collectgarbage()
 
 
@@ -619,7 +726,7 @@ a[3] = 30
 -- testing ipairs with metamethods
 a = {n=10}
 setmetatable(a, { __index = function (t,k)
-                     if k <= t.n then return k * 10 end 
+                     if k <= t.n then return k * 10 end
                   end})
 i = 0
 for k,v in ipairs(a) do
