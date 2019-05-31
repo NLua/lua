@@ -80,7 +80,9 @@
 
 
 #if defined(LUA_USE_MACOSX)
+#if !defined(LUA_USE_POSIX)
 #define LUA_USE_POSIX
+#endif
 #define LUA_USE_DLOPEN		/* MacOS does not need -ldl */
 #define LUA_USE_APPLE
 #endif
