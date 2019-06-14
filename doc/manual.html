@@ -781,19 +781,7 @@ If after a minor collection the use of memory is still above a limit,
 the collector does a <em>major</em> collection,
 which traverses all objects.
 The generational mode uses two parameters:
-the <em>major multiplier</em> and the <em>the minor multiplier</em>.
-
-
-<p>
-The major multiplier controls the frequency of major collections.
-For a major multiplier <em>x</em>,
-a new major collection will be done when memory
-grows <em>x%</em> larger than the memory in use after the previous major
-collection.
-For instance, for a multiplier of 100,
-the collector will do a major collection when the use of memory
-gets larger than twice the use after the previous collection.
-The default value is 100; the maximum value is 1000.
+the <em>minor multiplier</em> and the <em>the major multiplier</em>.
 
 
 <p>
@@ -806,6 +794,18 @@ For instance, for a multiplier of 20,
 the collector will do a minor collection when the use of memory
 gets 20% larger than the use after the previous major collection.
 The default value is 20; the maximum value is 200.
+
+
+<p>
+The major multiplier controls the frequency of major collections.
+For a major multiplier <em>x</em>,
+a new major collection will be done when memory
+grows <em>x%</em> larger than the memory in use after the previous major
+collection.
+For instance, for a multiplier of 100,
+the collector will do a major collection when the use of memory
+gets larger than twice the use after the previous collection.
+The default value is 100; the maximum value is 1000.
 
 
 
@@ -1061,7 +1061,7 @@ Unlike <a href="#pdf-coroutine.resume"><code>coroutine.resume</code></a>,
 the function created by <a href="#pdf-coroutine.wrap"><code>coroutine.wrap</code></a>
 propagates any error to the caller.
 In this case,
-the function also kills the coroutine (see <a href="#pdf-coroutine.kill"><code>coroutine.kill</code></a>).
+the function also closes the coroutine (see <a href="#pdf-coroutine.close"><code>coroutine.close</code></a>).
 
 
 <p>
@@ -1839,7 +1839,7 @@ There are two possible attributes:
 <code>const</code>, which declares a constant variable,
 that is, a variable that cannot be assigned to
 after its initialization;
-and <code>toclose</code>, wich declares a to-be-closed variable (see <a href="#3.3.8">&sect;3.3.8</a>).
+and <code>toclose</code>, which declares a to-be-closed variable (see <a href="#3.3.8">&sect;3.3.8</a>).
 
 
 <p>
@@ -1885,25 +1885,34 @@ if there was no error, the second argument is <b>nil</b>.
 <p>
 If several to-be-closed variables go out of scope at the same event,
 they are closed in the reverse order that they were declared.
+
+
+<p>
 If there is any error while running a closing method,
 that error is handled like an error in the regular code
 where the variable was defined;
 in particular,
 the other pending closing methods will still be called.
+After an error,
+other errors in closing methods
+interrupt the respective method,
+but are otherwise ignored;
+the error reported is the original one.
 
 
 <p>
 If a coroutine yields inside a block and is never resumed again,
 the variables visible at that block will never go out of scope,
-and therefore they will not be closed.
+and therefore they will never be closed.
 Similarly, if a coroutine ends with an error,
 it does not unwind its stack,
 so it does not close any variable.
-You should either use finalizers
-or call <a href="#pdf-coroutine.kill"><code>coroutine.kill</code></a> to close the variables in these cases.
-However, note that if the coroutine was created
+In both cases,
+you should either use finalizers
+or call <a href="#pdf-coroutine.close"><code>coroutine.close</code></a> to close the variables.
+However, if the coroutine was created
 through <a href="#pdf-coroutine.wrap"><code>coroutine.wrap</code></a>,
-then its corresponding function will close all variables
+then its corresponding function will close the coroutine
 in case of errors.
 
 
@@ -3676,7 +3685,7 @@ and therefore never returns
 
 <hr><h3><a name="lua_gc"><code>lua_gc</code></a></h3><p>
 <span class="apii">[-0, +0, &ndash;]</span>
-<pre>int lua_gc (lua_State *L, int what, int data);</pre>
+<pre>int lua_gc (lua_State *L, int what, ...);</pre>
 
 <p>
 Controls the garbage collector.
@@ -3684,50 +3693,53 @@ Controls the garbage collector.
 
 <p>
 This function performs several tasks,
-according to the value of the parameter <code>what</code>:
+according to the value of the parameter <code>what</code>.
+For options that need extra arguments,
+they are listed after the option.
 
 <ul>
 
+<li><b><code>LUA_GCCOLLECT</code>: </b>
+Performs a full garbage-collection cycle.
+</li>
+
 <li><b><code>LUA_GCSTOP</code>: </b>
-stops the garbage collector.
+Stops the garbage collector.
 </li>
 
 <li><b><code>LUA_GCRESTART</code>: </b>
-restarts the garbage collector.
-</li>
-
-<li><b><code>LUA_GCCOLLECT</code>: </b>
-performs a full garbage-collection cycle.
+Restarts the garbage collector.
 </li>
 
 <li><b><code>LUA_GCCOUNT</code>: </b>
-returns the current amount of memory (in Kbytes) in use by Lua.
+Returns the current amount of memory (in Kbytes) in use by Lua.
 </li>
 
 <li><b><code>LUA_GCCOUNTB</code>: </b>
-returns the remainder of dividing the current amount of bytes of
+Returns the remainder of dividing the current amount of bytes of
 memory in use by Lua by 1024.
 </li>
 
-<li><b><code>LUA_GCSTEP</code>: </b>
-performs an incremental step of garbage collection.
-</li>
-
-<li><b><code>LUA_GCSETPAUSE</code>: </b>
-sets <code>data</code> as the new value
-for the <em>pause</em> of the collector (see <a href="#2.5">&sect;2.5</a>)
-and returns the previous value of the pause.
-</li>
-
-<li><b><code>LUA_GCSETSTEPMUL</code>: </b>
-sets <code>data</code> as the new value for the <em>step multiplier</em> of
-the collector (see <a href="#2.5">&sect;2.5</a>)
-and returns the previous value of the step multiplier.
+<li><b><code>LUA_GCSTEP</code> <code>(int stepsize)</code>: </b>
+Performs an incremental step of garbage collection,
+corresponding to the allocation of <code>stepsize</code> Kbytes.
 </li>
 
 <li><b><code>LUA_GCISRUNNING</code>: </b>
-returns a boolean that tells whether the collector is running
+Returns a boolean that tells whether the collector is running
 (i.e., not stopped).
+</li>
+
+<li><b><code>LUA_GCINC</code> (int pause, int stepmul, stepsize): </b>
+Changes the collector to incremental mode
+with the given parameters (see <a href="#2.5.1">&sect;2.5.1</a>).
+Returns the previous mode (<code>LUA_GCGEN</code> or <code>LUA_GCINC</code>).
+</li>
+
+<li><b><code>LUA_GCGEN</code> (int minormul, int majormul): </b>
+Changes the collector to generational mode
+with the given parameters (see <a href="#2.5.2">&sect;2.5.2</a>).
+Returns the previous mode (<code>LUA_GCGEN</code> or <code>LUA_GCINC</code>).
 </li>
 
 </ul><p>
@@ -4254,7 +4266,6 @@ but has an independent execution stack.
 
 
 <p>
-There is no explicit function to close or to destroy a thread.
 Threads are subject to garbage collection,
 like any Lua object.
 
@@ -4938,7 +4949,7 @@ Returns a status code:
 <a href="#pdf-LUA_OK"><code>LUA_OK</code></a> for no errors in closing methods,
 or an error status otherwise.
 In case of error,
-leave the error object on the stack,
+leaves the error object on the top of the stack,
 
 
 
@@ -7586,42 +7597,41 @@ It performs different functions according to its first argument, <code>opt</code
 <ul>
 
 <li><b>"<code>collect</code>": </b>
-performs a full garbage-collection cycle.
+Performs a full garbage-collection cycle.
 This is the default option.
 </li>
 
 <li><b>"<code>stop</code>": </b>
-stops automatic execution of the garbage collector.
+Stops automatic execution of the garbage collector.
 The collector will run only when explicitly invoked,
 until a call to restart it.
 </li>
 
 <li><b>"<code>restart</code>": </b>
-restarts automatic execution of the garbage collector.
+Restarts automatic execution of the garbage collector.
 </li>
 
 <li><b>"<code>count</code>": </b>
-returns the total memory in use by Lua in Kbytes.
+Returns the total memory in use by Lua in Kbytes.
 The value has a fractional part,
 so that it multiplied by 1024
 gives the exact number of bytes in use by Lua.
 </li>
 
 <li><b>"<code>step</code>": </b>
-performs a garbage-collection step.
+Performs a garbage-collection step.
 The step "size" is controlled by <code>arg</code>.
 With a zero value,
 the collector will perform one basic (indivisible) step.
 For non-zero values,
 the collector will perform as if that amount of memory
-(in KBytes) had been allocated by Lua.
+(in Kbytes) had been allocated by Lua.
 Returns <b>true</b> if the step finished a collection cycle.
 </li>
 
-<li><b>"<code>setpause</code>": </b>
-sets <code>arg</code> as the new value for the <em>pause</em> of
-the collector (see <a href="#2.5">&sect;2.5</a>).
-Returns the previous value for <em>pause</em>.
+<li><b>"<code>isrunning</code>": </b>
+Returns a boolean that tells whether the collector is running
+(i.e., not stopped).
 </li>
 
 <li><b>"<code>incremental</code>": </b>
@@ -7629,7 +7639,7 @@ Change the collector mode to incremental.
 This option can be followed by three numbers:
 the garbage-collector pause,
 the step multiplier,
-and the step size.
+and the step size (see <a href="#2.5.1">&sect;2.5.1</a>).
 A zero means to not change that value.
 </li>
 
@@ -7637,13 +7647,8 @@ A zero means to not change that value.
 Change the collector mode to generational.
 This option can be followed by two numbers:
 the garbage-collector minor multiplier
-and the major multiplier.
+and the major multiplier (see <a href="#2.5.2">&sect;2.5.2</a>).
 A zero means to not change that value.
-</li>
-
-<li><b>"<code>isrunning</code>": </b>
-returns a boolean that tells whether the collector is running
-(i.e., not stopped).
 </li>
 
 </ul><p>
@@ -8076,14 +8081,12 @@ The current value of this variable is "<code>Lua 5.4</code>".
 
 
 <p>
-<hr><h3><a name="pdf-warn"><code>warn (message [, tocont])</code></a></h3>
+<hr><h3><a name="pdf-warn"><code>warn (msg1, &middot;&middot;&middot;)</code></a></h3>
 
 
 <p>
-Emits a warning with the given message.
-A message in a call with <code>tocont</code> true should be
-continued in another call to this function.
-The default for <code>tocont</code> is false.
+Emits a warning with a message composed by the concatenation
+of all its arguments (which should be strings).
 
 
 
@@ -8111,6 +8114,23 @@ See <a href="#2.6">&sect;2.6</a> for a general description of coroutines.
 
 
 <p>
+<hr><h3><a name="pdf-coroutine.close"><code>coroutine.close (co)</code></a></h3>
+
+
+<p>
+Closes coroutine <code>co</code>,
+that is,
+closes all its pending to-be-closed variables
+and puts the coroutine in a dead state.
+The given coroutine must be dead or suspended.
+In case of error closing some variable,
+returns <b>false</b> plus the error object;
+otherwise returns <b>true</b>.
+
+
+
+
+<p>
 <hr><h3><a name="pdf-coroutine.create"><code>coroutine.create (f)</code></a></h3>
 
 
@@ -8135,21 +8155,6 @@ The default for <code>co</code> is the running coroutine.
 <p>
 A coroutine is yieldable if it is not the main thread and
 it is not inside a non-yieldable C&nbsp;function.
-
-
-
-
-<p>
-<hr><h3><a name="pdf-coroutine.kill"><code>coroutine.kill (co)</code></a></h3>
-
-
-<p>
-Kills coroutine <code>co</code>,
-closing all its pending to-be-closed variables
-and putting the coroutine in a dead state.
-In case of error closing some variable,
-returns <b>false</b> plus the error object;
-otherwise returns <b>true</b>.
 
 
 
@@ -8199,7 +8204,8 @@ true when the running coroutine is the main one.
 <p>
 Returns the status of the coroutine <code>co</code>, as a string:
 <code>"running"</code>,
-if the coroutine is running (that is, it called <code>status</code>);
+if the coroutine is running
+(that is, it is the one that called <code>status</code>);
 <code>"suspended"</code>, if the coroutine is suspended in a call to <code>yield</code>,
 or if it has not started running yet;
 <code>"normal"</code> if the coroutine is active but not running
@@ -8223,7 +8229,7 @@ extra arguments to <code>resume</code>.
 The function returns the same values returned by <code>resume</code>,
 except the first boolean.
 In case of error,
-the function kills the coroutine and propagates the error.
+the function closes the coroutine and propagates the error.
 
 
 
@@ -11396,6 +11402,12 @@ do not accept surrogates as valid code points.
 An extra parameter in these functions makes them more permissive.
 </li>
 
+<li>
+The options "<code>setpause</code>" and "<code>setstepmul</code>"
+of the function <a href="#pdf-collectgarbage"><code>collectgarbage</code></a> are deprecated.
+You should use the new option "<code>incremental</code>" to set them.
+</li>
+
 </ul>
 
 
@@ -11443,6 +11455,12 @@ address space.
 The constant <code>LUA_ERRGCMM</code> was removed.
 Errors in finalizers are never propagated;
 instead, they generate a warning.
+</li>
+
+<li>
+The options <code>LUA_GCSETPAUSE</code> and <code>LUA_GCSETSTEPMUL</code>
+of the function <a href="#lua_gc"><code>lua_gc</code></a> are deprecated.
+You should use the new option <code>LUA_GCINC</code> to set them.
 </li>
 
 </ul>
@@ -11544,7 +11562,7 @@ and LiteralString, see <a href="#3.1">&sect;3.1</a>.)
 
 <P CLASS="footer">
 Last update:
-Wed May 29 08:06:33 -03 2019
+Thu Jun  6 15:59:35 -03 2019
 </P>
 <!--
 Last change: revised for Lua 5.4.0 (alpha)

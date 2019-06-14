@@ -135,15 +135,11 @@ static time_t l_checktime (lua_State *L, int arg) {
 /* }================================================================== */
 
 
-#if defined(LUA_USE_APPLE) && !defined(LUA_USE_MACOSX)
-#define lua_system(cmd) ((int)-1)
-#else
-#define lua_system(cmd) system(cmd)
-#endif
+
 
 static int os_execute (lua_State *L) {
   const char *cmd = luaL_optstring(L, 1, NULL);
-  int stat = lua_system(cmd);
+  int stat = system(cmd);
   if (cmd != NULL)
     return luaL_execresult(L, stat);
   else {
