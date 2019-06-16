@@ -292,7 +292,7 @@
 			dependencies = (
 			);
 			name = liblua54;
-			productName = lua53;
+			productName = lua54;
 			productReference = 1895CBA821A7B99E000F1C30 /* liblua54.framework */;
 			productType = "com.apple.product-type.framework";
 		};
