@@ -1,4 +1,4 @@
--- $Id: errors.lua,v 1.94 2016/12/21 19:23:02 roberto Exp $
+-- $Id: testes/errors.lua $
 -- See Copyright Notice in file all.lua
 
 print("testing errors")
@@ -18,7 +18,7 @@ end
 
 local function doit (s)
   local f, msg = load(s)
-  if f == nil then return msg end
+  if not f then return msg end
   local cond, msg = pcall(f)
   return (not cond) and msg
 end
@@ -67,6 +67,24 @@ checksyntax([[
 ]], "'}' expected (to close '{' at line 1)", "<eof>", 3)
 
 
+if not T then
+  (Message or print)
+    ('\n >>> testC not active: skipping memory message test <<<\n')
+else
+  print "testing memory error message"
+  local a = {}
+  for i = 1, 10000 do a[i] = true end   -- preallocate array
+  collectgarbage()
+  T.totalmem(T.totalmem() + 10000)
+  -- force a memory error (by a small margin)
+  local st, msg = pcall(function()
+    for i = 1, 100000 do a[i] = tostring(i) end
+  end)
+  T.totalmem(0)
+  assert(not st and msg == "not enough" .. " memory")
+end
+
+
 -- tests for better error messages
 
 checkmessage("a = {} + 1", "arithmetic")
@@ -81,6 +99,10 @@ assert(not string.find(doit"a={13}; local bbbb=1; a[bbbb](3)", "'bbbb'"))
 checkmessage("a={13}; local bbbb=1; a[bbbb](3)", "number")
 checkmessage("a=(1)..{}", "a table value")
 
+-- tail calls
+checkmessage("local a={}; return a.bbbb(3)", "field 'bbbb'")
+checkmessage("a={}; do local a=1 end; return a:bbbb(3)", "method 'bbbb'")
+
 checkmessage("a = #print", "length of a function value")
 checkmessage("a = #3", "length of a number value")
 
@@ -88,7 +110,7 @@ aaa = nil
 checkmessage("aaa.bbb:ddd(9)", "global 'aaa'")
 checkmessage("local aaa={bbb=1}; aaa.bbb:ddd(9)", "field 'bbb'")
 checkmessage("local aaa={bbb={}}; aaa.bbb:ddd(9)", "method 'ddd'")
-checkmessage("local a,b,c; (function () a = b+1 end)()", "upvalue 'b'")
+checkmessage("local a,b,c; (function () a = b+1.1 end)()", "upvalue 'b'")
 assert(not doit"local aaa={bbb={ddd=next}}; aaa.bbb:ddd(nil)")
 
 -- upvalues being indexed do not go to the stack
@@ -97,9 +119,9 @@ checkmessage("local a,b,cc; (function () a.x = 1 end)()", "upvalue 'a'")
 
 checkmessage("local _ENV = {x={}}; a = a + 1", "global 'a'")
 
-checkmessage("b=1; local aaa='a'; x=aaa+b", "local 'aaa'")
-checkmessage("aaa={}; x=3/aaa", "global 'aaa'")
-checkmessage("aaa='2'; b=nil;x=aaa*b", "global 'b'")
+checkmessage("b=1; local aaa={}; x=aaa+b", "local 'aaa'")
+checkmessage("aaa={}; x=3.3/aaa", "global 'aaa'")
+checkmessage("aaa=2; b=nil;x=aaa*b", "global 'b'")
 checkmessage("aaa={}; x=-aaa", "global 'aaa'")
 
 -- short circuit
@@ -119,9 +141,9 @@ checkmessage("print(10 < '23')", "number with string")
 -- float->integer conversions
 checkmessage("local a = 2.0^100; x = a << 2", "local a")
 checkmessage("local a = 1 >> 2.0^100", "has no integer representation")
-checkmessage("local a = '10' << 2.0^100", "has no integer representation")
+checkmessage("local a = 10.1 << 2.0^100", "has no integer representation")
 checkmessage("local a = 2.0^100 & 1", "has no integer representation")
-checkmessage("local a = 2.0^100 & '1'", "has no integer representation")
+checkmessage("local a = 2.0^100 & 1e100", "has no integer representation")
 checkmessage("local a = 2.0 | 1e40", "has no integer representation")
 checkmessage("local a = 2e100 ~ 1", "has no integer representation")
 checkmessage("string.sub('a', 2.0^100)", "has no integer representation")
@@ -135,6 +157,16 @@ checkmessage("return 34 >> {}", "table value")
 checkmessage("a = 24 // 0", "divide by zero")
 checkmessage("a = 1 % 0", "'n%0'")
 
+
+-- numeric for loops
+checkmessage("for i = {}, 10 do end", "table")
+checkmessage("for i = io.stdin, 10 do end", "FILE")
+checkmessage("for i = {}, 10 do end", "initial value")
+checkmessage("for i = 1, 'x', 10 do end", "string")
+checkmessage("for i = 1, {}, 10 do end", "limit")
+checkmessage("for i = 1, {} do end", "limit")
+checkmessage("for i = 1, 10, print do end", "step")
+checkmessage("for i = 1, 10, print do end", "function")
 
 -- passing light userdata instead of full userdata
 _G.D = debug
@@ -280,8 +312,8 @@ end
 
 local function lineerror (s, l)
   local err,msg = pcall(load(s))
-  local line = string.match(msg, ":(%d+):")
-  assert((line and line+0) == l)
+  local line = tonumber(string.match(msg, ":(%d+):"))
+  assert(line == l or (not line and not l))
 end
 
 lineerror("local a\n for i=1,'a' do \n print(i) \n end", 2)
@@ -327,9 +359,26 @@ local p = [[
 g()
 ]]
 X=3;lineerror((p), 3)
-X=0;lineerror((p), nil)
+X=0;lineerror((p), false)
 X=1;lineerror((p), 2)
 X=2;lineerror((p), 1)
+
+
+lineerror([[
+local b = false
+if not b then
+  error 'test'
+end]], 3)
+
+lineerror([[
+local b = false
+if not b then
+  if not b then
+    if not b then
+      error 'test'
+    end
+  end
+end]], 5)
 
 
 if not _soft then
@@ -340,7 +389,7 @@ if not _soft then
   local l = debug.getinfo(1, "l").currentline; function y () C=C+1; y() end
 
   local function checkstackmessage (m)
-    return (string.find(m, "^.-:%d+: stack overflow"))
+    return (string.find(m, "stack overflow"))
   end
   -- repeated stack overflows (to check stack recovery)
   assert(checkstackmessage(doit('y()')))
@@ -461,7 +510,7 @@ checksyntax("a\1a = 1", "", "<\\1>", 1)
 checksyntax("\255a = 1", "", "<\\255>", 1)
 
 doit('I = load("a=9+"); a=3')
-assert(a==3 and I == nil)
+assert(a==3 and not I)
 print('+')
 
 lim = 1000
@@ -474,26 +523,29 @@ end
 
 -- testing syntax limits
 
-local maxClevel = 200    -- LUAI_MAXCCALLS (in llimits.h)
-
-local function testrep (init, rep, close, repc)
-  local s = init .. string.rep(rep, maxClevel - 10) .. close ..
-               string.rep(repc, maxClevel - 10)
-  assert(load(s))   -- 190 levels is OK
-  s = init .. string.rep(rep, maxClevel + 1)
-  checkmessage(s, "too many C levels")
+local function testrep (init, rep, close, repc, finalresult)
+  local s = init .. string.rep(rep, 100) .. close .. string.rep(repc, 100)
+  local res, msg = load(s)
+  assert(res)   -- 100 levels is OK
+  if (finalresult) then
+    assert(res() == finalresult)
+  end
+  s = init .. string.rep(rep, 10000)
+  local res, msg = load(s)   -- 10000 levels not ok
+  assert(not res and (string.find(msg, "too many registers") or
+                      string.find(msg, "stack overflow")))
 end
 
 testrep("local a; a", ",a", "= 1", ",1")    -- multiple assignment
 testrep("local a; a=", "{", "0", "}")
-testrep("local a; a=", "(", "2", ")")
-testrep("local a; ", "a(", "2", ")")
+testrep("return ", "(", "2", ")", 2)
+testrep("local function a (x) return x end; return ", "a(", "2.2", ")", 2.2)
 testrep("", "do ", "", " end")
 testrep("", "while a do ", "", " end")
 testrep("local a; ", "if a then else ", "", " end")
 testrep("", "function foo () ", "", " end")
-testrep("local a; a=", "a..", "a", "")
-testrep("local a; a=", "a^", "a", "")
+testrep("local a = ''; return ", "a..", "'a'", "", "a")
+testrep("local a = 1; return ", "a^", "a", "", 1)
 
 checkmessage("a = f(x" .. string.rep(",x", 260) .. ")", "too many registers")
 

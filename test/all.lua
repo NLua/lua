@@ -1,17 +1,17 @@
 #!../lua
--- $Id: all.lua,v 1.95 2016/11/07 13:11:28 roberto Exp $
+-- $Id: testes/all.lua $
 -- See Copyright Notice at the end of this file
 
 
-local version = "Lua 5.3"
+local version = "Lua 5.4"
 if _VERSION ~= version then
-  io.stderr:write("\nThis test suite is for ", version, ", not for ", _VERSION,
-    "\nExiting tests\n")
+  io.stderr:write("This test suite is for ", version,
+                  ", not for ", _VERSION, "\nExiting tests")
   return
 end
 
 
-_G._ARG = arg   -- save arg for other tests
+_G.ARG = arg   -- save arg for other tests
 
 
 -- next variables control the execution of some tests
@@ -37,19 +37,27 @@ end
 -- tests should require debug when needed
 debug = nil
 
+
 if usertests then
   T = nil    -- no "internal" tests for user tests
 else
   T = rawget(_G, "T")  -- avoid problems with 'strict' module
 end
 
-math.randomseed(0)
 
 --[=[
   example of a long [comment],
   [[spanning several [lines]]]
 
 ]=]
+
+print("\n\tStarting Tests")
+
+do
+  -- set random seed
+  local random_x, random_y = math.randomseed()
+  print(string.format("random seeds: %d, %d", random_x, random_y))
+end
 
 print("current path:\n****" .. package.path .. "****\n")
 
@@ -92,6 +100,8 @@ local function F (m)
   end
 end
 
+local Cstacklevel
+
 local showmem
 if not T then
   local max = 0
@@ -101,6 +111,7 @@ if not T then
     print(format("    ---- total memory: %s, max memory: %s ----\n",
           F(m), F(max)))
   end
+  Cstacklevel = function () return 0 end   -- no info about stack level
 else
   showmem = function ()
     T.checkmemory()
@@ -114,8 +125,15 @@ else
                  T.totalmem"string", T.totalmem"table", T.totalmem"function",
                  T.totalmem"userdata", T.totalmem"thread"))
   end
+
+  Cstacklevel = function ()
+    local _, _, ncalls, nci = T.stacklevel()
+    return ncalls  + nci   -- number of free slots in the C stack
+  end
 end
 
+
+local Cstack = Cstacklevel()
 
 --
 -- redefine dofile to run files through dump/undump
@@ -159,7 +177,7 @@ olddofile('strings.lua')
 olddofile('literals.lua')
 dofile('tpack.lua')
 assert(dofile('attrib.lua') == 27)
-
+dofile('gengc.lua')
 assert(dofile('locals.lua') == 5)
 dofile('constructs.lua')
 dofile('code.lua', true)
@@ -169,6 +187,7 @@ if not _G._soft then
   assert(f() == 'b')
   assert(f() == 'a')
 end
+dofile('cstack.lua')
 dofile('nextvar.lua')
 dofile('pm.lua')
 dofile('utf8.lua')
@@ -186,12 +205,18 @@ assert(dofile('verybig.lua', true) == 10); collectgarbage()
 dofile('files.lua')
 
 if #msgs > 0 then
-  print("\ntests not performed:")
-  for i=1,#msgs do
-    print(msgs[i])
-  end
-  print()
+  local m = table.concat(msgs, "\n  ")
+  warn("#tests not performed:\n  ", m, "\n")
 end
+
+print("(there should be two warnings now)")
+warn("@on")
+warn("#This is ", "an expected", " warning")
+warn("@off")
+warn("******** THIS WARNING SHOULD NOT APPEAR **********")
+warn("******** THIS WARNING ALSO SHOULD NOT APPEAR **********")
+warn("@on")
+warn("#This is", " another one")
 
 -- no test module should define 'debug'
 assert(debug == nil)
@@ -206,11 +231,16 @@ debug.sethook(function (a) assert(type(a) == 'string') end, "cr")
 -- to survive outside block
 _G.showmem = showmem
 
+
+assert(Cstack == Cstacklevel(),
+  "should be at the same C-stack level it was when started the tests")
+
 end   --)
 
-local _G, showmem, print, format, clock, time, difftime, assert, open =
+local _G, showmem, print, format, clock, time, difftime,
+      assert, open, warn =
       _G, showmem, print, string.format, os.clock, os.time, os.difftime,
-      assert, io.open
+      assert, io.open, warn
 
 -- file with time of last performed test
 local fname = T and "time-debug.txt" or "time.txt"
@@ -231,7 +261,7 @@ end
 print('cleaning all!!!!')
 for n in pairs(_G) do
   if not ({___Glob = 1, tostring = 1})[n] then
-    _G[n] = nil
+    _G[n] = undef
   end
 end
 
@@ -254,7 +284,7 @@ if not usertests then
   local diff = (clocktime - lasttime) / lasttime
   local tolerance = 0.05    -- 5%
   if (diff >= tolerance or diff <= -tolerance) then
-    print(format("WARNING: time difference from previous test: %+.1f%%",
+    warn(format("#time difference from previous test: %+.1f%%",
                   diff * 100))
   end
   assert(open(fname, "w")):write(clocktime):close()

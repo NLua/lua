@@ -1,12 +1,12 @@
--- $Id: vararg.lua,v 1.25 2016/11/07 13:11:28 roberto Exp $
+-- $Id: testes/vararg.lua $
 -- See Copyright Notice in file all.lua
 
 print('testing vararg')
 
 function f(a, ...)
-  local arg = {n = select('#', ...), ...}
-  for i=1,arg.n do assert(a[i]==arg[i]) end
-  return arg.n
+  local x = {n = select('#', ...), ...}
+  for i = 1, x.n do assert(a[i] == x[i]) end
+  return x.n
 end
 
 function c12 (...)
@@ -24,6 +24,9 @@ local call = function (f, args) return f(table.unpack(args, 1, args.n)) end
 assert(f() == 0)
 assert(f({1,2,3}, 1, 2, 3) == 3)
 assert(f({"alo", nil, 45, f, nil}, "alo", nil, 45, f, nil) == 5)
+
+assert(vararg().n == 0)
+assert(vararg(nil, nil).n == 2)
 
 assert(c12(1,2)==55)
 a,b = assert(call(c12, {1,2}))
@@ -98,13 +101,13 @@ assert(a==nil and b==nil and c==nil and d==nil and e==nil)
 -- varargs for main chunks
 f = load[[ return {...} ]]
 x = f(2,3)
-assert(x[1] == 2 and x[2] == 3 and x[3] == nil)
+assert(x[1] == 2 and x[2] == 3 and x[3] == undef)
 
 
 f = load[[
   local x = {...}
   for i=1,select('#', ...) do assert(x[i] == select(i, ...)) end
-  assert(x[select('#', ...)+1] == nil)
+  assert(x[select('#', ...)+1] == undef)
   return true
 ]]
 
@@ -116,9 +119,9 @@ assert(#a == 2 and a[1] == 30 and a[2] == 40)
 a = {select(1)}
 assert(next(a) == nil)
 a = {select(-1, 3, 5, 7)}
-assert(a[1] == 7 and a[2] == nil)
+assert(a[1] == 7 and a[2] == undef)
 a = {select(-2, 3, 5, 7)}
-assert(a[1] == 5 and a[2] == 7 and a[3] == nil)
+assert(a[1] == 5 and a[2] == 7 and a[3] == undef)
 pcall(select, 10000)
 pcall(select, -10000)
 
@@ -137,6 +140,12 @@ end
 -- assertion fail here
 f()
 
-
+-- missing arguments in tail call
+do
+  local function f(a,b,c) return c, b end
+  local function g() return f(1,2) end
+  local a, b = g()
+  assert(a == nil and b == 2)
+end
 print('OK')
 

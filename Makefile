@@ -36,7 +36,7 @@ RM= rm -f
 # == END OF USER SETTINGS -- NO NEED TO CHANGE ANYTHING BELOW THIS LINE =======
 
 # Convenience platforms targets.
-PLATS= aix bsd c89 freebsd generic linux macosx mingw posix solaris
+PLATS= aix bsd c89 freebsd generic guess linux linux-readline macosx mingw posix solaris
 
 # What to install.
 TO_BIN= lua luac
@@ -45,8 +45,8 @@ TO_LIB= liblua.a
 TO_MAN= lua.1 luac.1
 
 # Lua version and release.
-V= 5.3
-R= $V.5
+V= 5.4
+R= $V.0
 
 # Targets start here.
 all:	$(PLAT)
@@ -109,6 +109,6 @@ pc:
 	@echo "includedir=$(INSTALL_INC)"
 
 # list targets that do not create files (but not all makes understand .PHONY)
-.PHONY: all $(PLATS) clean test install local none dummy echo pecho lecho
+.PHONY: all $(PLATS) clean test install uninstall local none dummy echo pc
 
 # (end of Makefile)

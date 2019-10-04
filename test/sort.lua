@@ -1,4 +1,4 @@
--- $Id: sort.lua,v 1.38 2016/11/07 13:11:28 roberto Exp $
+-- $Id: testes/sort.lua $
 -- See Copyright Notice in file all.lua
 
 print "testing (parts of) table library"
@@ -79,7 +79,7 @@ end
 print "testing pack"
 
 a = table.pack()
-assert(a[1] == nil and a.n == 0) 
+assert(a[1] == undef and a.n == 0) 
 
 a = table.pack(table)
 assert(a[1] == table and a.n == 1)

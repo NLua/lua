@@ -1,4 +1,4 @@
--- $Id: big.lua,v 1.32 2016/11/07 13:11:28 roberto Exp $
+-- $Id: testes/big.lua $
 -- See Copyright Notice in file all.lua
 
 if _soft then
@@ -23,7 +23,7 @@ local f = assert(load(prog, nil, nil, env))
 
 f()
 assert(env.X[lim] == lim - 1 and env.X[lim + 1] == lim)
-for k in pairs(env) do env[k] = nil end
+for k in pairs(env) do env[k] = undef end
 
 -- yields during accesses larger than K (in RK)
 setmetatable(env, {
@@ -49,7 +49,7 @@ assert(not e and m:find("global 'X'"))
 -- errors in metamethods 
 getmetatable(env).__newindex = function () error("hi") end
 local e, m = xpcall(f, debug.traceback)
-assert(not e and m:find("'__newindex'"))
+assert(not e and m:find("'newindex'"))
 
 f, X = nil
 

@@ -35,7 +35,7 @@ SET(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib${LIB_SUFFIX}")
 SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin${LIB_SUFFIX}")
 SET(EXECUTABLE_OUTPUT_PATH         "${CMAKE_BINARY_DIR}/bin${LIB_SUFFIX}")
 
-SET (LIB_LUA_VER "53" CACHE STRING "Suffix of version (for library name) e.g lua53")
+SET (LIB_LUA_VER "54" CACHE STRING "Suffix of version (for library name) e.g lua54")
 
 #
 # Include dir COPY
@@ -99,7 +99,6 @@ SET (   SRC_LIB
 		src/lapi.c
 		src/lauxlib.c
 		src/lbaselib.c
-		src/lbitlib.c
 		src/lcode.c
 		src/lcorolib.c
 		src/lctype.c
