@@ -685,7 +685,11 @@
 ** macro must include the header 'locale.h'.)
 */
 #if !defined(lua_getlocaledecpoint)
+#ifdef __ANDROID__ /* NDK doesn't support localeconv */
+#define lua_getlocaledecpoint()		'.'
+#else
 #define lua_getlocaledecpoint()		(localeconv()->decimal_point[0])
+#endif
 #endif
 
 /* }================================================================== */
