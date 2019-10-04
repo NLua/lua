@@ -99,35 +99,28 @@ local function GC()  GC1(); GC2() end
 do
   print("creating many objects")
 
-  local contCreate = 0
-
   local limit = 5000
 
-  while contCreate <= limit do
+  for i = 1, limit do
     local a = {}; a = nil
-    contCreate = contCreate+1
   end
 
   local a = "a"
 
-  contCreate = 0
-  while contCreate <= limit do
-    a = contCreate .. "b";
+  for i = 1, limit do
+    a = i .. "b";
     a = string.gsub(a, '(%d%d*)', "%1 %1")
     a = "a"
-    contCreate = contCreate+1
   end
 
 
-  contCreate = 0
 
   a = {}
 
   function a:test ()
-    while contCreate <= limit do
-      load(string.format("function temp(a) return 'a%d' end", contCreate), "")()
-      assert(temp() == string.format('a%d', contCreate))
-      contCreate = contCreate+1
+    for i = 1, limit do
+      load(string.format("function temp(a) return 'a%d' end", i), "")()
+      assert(temp() == string.format('a%d', i))
     end
   end
 
@@ -166,9 +159,8 @@ print('long strings')
 x = "01234567890123456789012345678901234567890123456789012345678901234567890123456789"
 assert(string.len(x)==80)
 s = ''
-n = 0
 k = math.min(300, (math.maxinteger // 80) // 2)
-while n < k do s = s..x; n=n+1; j=tostring(n)  end
+for n = 1, k do s = s..x; j=tostring(n)  end
 assert(string.len(s) == k*80)
 s = string.sub(s, 1, 10000)
 s, i = string.gsub(s, '(%d%d%d%d)', '')
@@ -377,9 +369,10 @@ if T then
     s[n] = i
   end
 
+  warn("@on"); warn("@store")
   collectgarbage()
   assert(string.find(_WARN, "error in __gc metamethod"))
-  assert(string.match(_WARN, "@(.-)@") == "expected")
+  assert(string.match(_WARN, "@(.-)@") == "expected"); _WARN = nil
   for i = 8, 10 do assert(s[i]) end
 
   for i = 1, 5 do
@@ -391,6 +384,7 @@ if T then
   for i = 1, 10 do assert(s[i]) end
 
   getmetatable(u).__gc = nil
+  warn("@normal")
 
 end
 print '+'
@@ -483,9 +477,12 @@ end
 
 -- errors during collection
 if T then
+  warn("@store")
   u = setmetatable({}, {__gc = function () error "@expected error" end})
   u = nil
   collectgarbage()
+  assert(string.find(_WARN, "@expected error")); _WARN = nil
+  warn("@normal")
 end
 
 
@@ -653,7 +650,7 @@ end
 
 -- create several objects to raise errors when collected while closing state
 if T then
-  local error, assert, find = error, assert, string.find
+  local error, assert, find, warn = error, assert, string.find, warn
   local n = 0
   local lastmsg
   local mt = {__gc = function (o)
@@ -667,6 +664,7 @@ if T then
     else
       assert(lastmsg == _WARN)  -- subsequent error messages are equal
     end
+    warn("@store"); _WARN = nil
     error"@expected warning"
   end}
   for i = 10, 1, -1 do

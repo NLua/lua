@@ -3,8 +3,8 @@
 
 print('testing strings and string library')
 
-local <const> maxi = math.maxinteger
-local <const> mini = math.mininteger
+local maxi <const> = math.maxinteger
+local mini <const> = math.mininteger
 
 
 local function checkerror (msg, f, ...)
@@ -56,13 +56,13 @@ a,b = string.find("123456789", "345")
 assert(string.sub("123456789", a, b) == "345")
 assert(string.find("1234567890123456789", "345", 3) == 3)
 assert(string.find("1234567890123456789", "345", 4) == 13)
-assert(string.find("1234567890123456789", "346", 4) == nil)
+assert(not string.find("1234567890123456789", "346", 4))
 assert(string.find("1234567890123456789", ".45", -9) == 13)
-assert(string.find("abcdefg", "\0", 5, 1) == nil)
+assert(not string.find("abcdefg", "\0", 5, 1))
 assert(string.find("", "") == 1)
 assert(string.find("", "", 1) == 1)
 assert(not string.find("", "", 2))
-assert(string.find('', 'aaa', 1) == nil)
+assert(not string.find('', 'aaa', 1))
 assert(('alo(.)alo'):find('(.)', 1, 1) == 4)
 
 assert(string.len("") == 0)
@@ -163,11 +163,19 @@ do  -- tests for '%p' format
   assert(string.format("%p", 4) == null)
   assert(string.format("%p", print) ~= null)
   assert(string.format("%p", coroutine.running()) ~= null)
-  assert(string.format("%p", {}) ~= string.format("%p", {}))
-  assert(string.format("%p", string.rep("a", 10)) ==
-         string.format("%p", string.rep("a", 10)))     -- short strings
-  assert(string.format("%p", string.rep("a", 300)) ~=
-         string.format("%p", string.rep("a", 300)))     -- long strings
+  do
+    local t1 = {}; local t2 = {}
+    assert(string.format("%p", t1) ~= string.format("%p", t2))
+  end
+  do     -- short strings
+    local s1 = string.rep("a", 10)
+    local s2 = string.rep("a", 10)
+  assert(string.format("%p", s1) == string.format("%p", s2))
+  end
+  do     -- long strings
+    local s1 = string.rep("a", 300); local s2 = string.rep("a", 300)
+    assert(string.format("%p", s1) ~= string.format("%p", s2))
+  end
   assert(#string.format("%90p", {}) == 90)
 end
 
@@ -250,6 +258,12 @@ do    -- longest number that can be formatted
   local s = string.format('%.99f', -(10^i))
   assert(string.len(s) >= i + 101)
   assert(tonumber(s) == -(10^i))
+
+  -- limit for floats
+  assert(10^38 < math.huge)
+  local s = string.format('%.99f', -(10^38))
+  assert(string.len(s) >= 38 + 101)
+  assert(tonumber(s) == -(10^38))
 end
 
 

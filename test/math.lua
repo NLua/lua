@@ -3,10 +3,10 @@
 
 print("testing numbers and math lib")
 
-local <const> minint = math.mininteger
-local <const> maxint = math.maxinteger
+local minint <const> = math.mininteger
+local maxint <const> = math.maxinteger
 
-local <const> intbits = math.floor(math.log(maxint, 2) + 0.5) + 1
+local intbits <const> = math.floor(math.log(maxint, 2) + 0.5) + 1
 assert((1 << intbits) == 0)
 
 assert(minint == 1 << (intbits - 1))
@@ -39,7 +39,7 @@ do
 end
 
 assert(math.type(0) == "integer" and math.type(0.0) == "float"
-       and math.type("10") == nil)
+       and not math.type("10"))
 
 
 local function checkerror (msg, f, ...)
@@ -270,7 +270,7 @@ else
 end
 
 do
-  local NaN = 0/0
+  local NaN <const> = 0/0
   assert(not (NaN < 0))
   assert(not (NaN > minint))
   assert(not (NaN <= -9))
@@ -381,17 +381,17 @@ assert(tonumber(1/0) == 1/0)
 
 -- 'tonumber' with strings
 assert(tonumber("0") == 0)
-assert(tonumber("") == nil)
-assert(tonumber("  ") == nil)
-assert(tonumber("-") == nil)
-assert(tonumber("  -0x ") == nil)
-assert(tonumber{} == nil)
+assert(not tonumber(""))
+assert(not tonumber("  "))
+assert(not tonumber("-"))
+assert(not tonumber("  -0x "))
+assert(not tonumber{})
 assert(tonumber'+0.01' == 1/100 and tonumber'+.01' == 0.01 and
        tonumber'.01' == 0.01    and tonumber'-1.' == -1 and
        tonumber'+1.' == 1)
-assert(tonumber'+ 0.01' == nil and tonumber'+.e1' == nil and
-       tonumber'1e' == nil     and tonumber'1.0e+' == nil and
-       tonumber'.' == nil)
+assert(not tonumber'+ 0.01' and not tonumber'+.e1' and
+       not tonumber'1e'     and not tonumber'1.0e+' and
+       not tonumber'.')
 assert(tonumber('-012') == -010-2)
 assert(tonumber('-1.2e2') == - - -120)
 
@@ -445,45 +445,45 @@ local function f (...)
   end
 end
 
-assert(f(tonumber('fFfa', 15)) == nil)
-assert(f(tonumber('099', 8)) == nil)
-assert(f(tonumber('1\0', 2)) == nil)
-assert(f(tonumber('', 8)) == nil)
-assert(f(tonumber('  ', 9)) == nil)
-assert(f(tonumber('  ', 9)) == nil)
-assert(f(tonumber('0xf', 10)) == nil)
+assert(not f(tonumber('fFfa', 15)))
+assert(not f(tonumber('099', 8)))
+assert(not f(tonumber('1\0', 2)))
+assert(not f(tonumber('', 8)))
+assert(not f(tonumber('  ', 9)))
+assert(not f(tonumber('  ', 9)))
+assert(not f(tonumber('0xf', 10)))
 
-assert(f(tonumber('inf')) == nil)
-assert(f(tonumber(' INF ')) == nil)
-assert(f(tonumber('Nan')) == nil)
-assert(f(tonumber('nan')) == nil)
+assert(not f(tonumber('inf')))
+assert(not f(tonumber(' INF ')))
+assert(not f(tonumber('Nan')))
+assert(not f(tonumber('nan')))
 
-assert(f(tonumber('  ')) == nil)
-assert(f(tonumber('')) == nil)
-assert(f(tonumber('1  a')) == nil)
-assert(f(tonumber('1  a', 2)) == nil)
-assert(f(tonumber('1\0')) == nil)
-assert(f(tonumber('1 \0')) == nil)
-assert(f(tonumber('1\0 ')) == nil)
-assert(f(tonumber('e1')) == nil)
-assert(f(tonumber('e  1')) == nil)
-assert(f(tonumber(' 3.4.5 ')) == nil)
+assert(not f(tonumber('  ')))
+assert(not f(tonumber('')))
+assert(not f(tonumber('1  a')))
+assert(not f(tonumber('1  a', 2)))
+assert(not f(tonumber('1\0')))
+assert(not f(tonumber('1 \0')))
+assert(not f(tonumber('1\0 ')))
+assert(not f(tonumber('e1')))
+assert(not f(tonumber('e  1')))
+assert(not f(tonumber(' 3.4.5 ')))
 
 
 -- testing 'tonumber' for invalid hexadecimal formats
 
-assert(tonumber('0x') == nil)
-assert(tonumber('x') == nil)
-assert(tonumber('x3') == nil)
-assert(tonumber('0x3.3.3') == nil)   -- two decimal points
-assert(tonumber('00x2') == nil)
-assert(tonumber('0x 2') == nil)
-assert(tonumber('0 x2') == nil)
-assert(tonumber('23x') == nil)
-assert(tonumber('- 0xaa') == nil)
-assert(tonumber('-0xaaP ') == nil)   -- no exponent
-assert(tonumber('0x0.51p') == nil)
-assert(tonumber('0x5p+-2') == nil)
+assert(not tonumber('0x'))
+assert(not tonumber('x'))
+assert(not tonumber('x3'))
+assert(not tonumber('0x3.3.3'))   -- two decimal points
+assert(not tonumber('00x2'))
+assert(not tonumber('0x 2'))
+assert(not tonumber('0 x2'))
+assert(not tonumber('23x'))
+assert(not tonumber('- 0xaa'))
+assert(not tonumber('-0xaaP '))   -- no exponent
+assert(not tonumber('0x0.51p'))
+assert(not tonumber('0x5p+-2'))
 
 
 -- testing hexadecimal numerals
@@ -705,19 +705,19 @@ do   -- testing floor & ceil
   assert(eqT(math.tointeger(maxint), maxint))
   assert(eqT(math.tointeger(maxint .. ""), maxint))
   assert(eqT(math.tointeger(minint + 0.0), minint))
-  assert(math.tointeger(0.0 - minint) == nil)
-  assert(math.tointeger(math.pi) == nil)
-  assert(math.tointeger(-math.pi) == nil)
+  assert(not math.tointeger(0.0 - minint))
+  assert(not math.tointeger(math.pi))
+  assert(not math.tointeger(-math.pi))
   assert(math.floor(math.huge) == math.huge)
   assert(math.ceil(math.huge) == math.huge)
-  assert(math.tointeger(math.huge) == nil)
+  assert(not math.tointeger(math.huge))
   assert(math.floor(-math.huge) == -math.huge)
   assert(math.ceil(-math.huge) == -math.huge)
-  assert(math.tointeger(-math.huge) == nil)
+  assert(not math.tointeger(-math.huge))
   assert(math.tointeger("34.0") == 34)
-  assert(math.tointeger("34.3") == nil)
-  assert(math.tointeger({}) == nil)
-  assert(math.tointeger(0/0) == nil)    -- NaN
+  assert(not math.tointeger("34.3"))
+  assert(not math.tointeger({}))
+  assert(not math.tointeger(0/0))    -- NaN
 end
 
 
@@ -767,7 +767,8 @@ assert(a == '10' and b == '20')
 
 do
   print("testing -0 and NaN")
-  local mz, z = -0.0, 0.0
+  local mz <const> = -0.0
+  local z <const> = 0.0
   assert(mz == z)
   assert(1/mz < 0 and 0 < 1/z)
   local a = {[mz] = 1}
@@ -775,17 +776,18 @@ do
   a[z] = 2
   assert(a[z] == 2 and a[mz] == 2)
   local inf = math.huge * 2 + 1
-  mz, z = -1/inf, 1/inf
+  local mz <const> = -1/inf
+  local z <const> = 1/inf
   assert(mz == z)
   assert(1/mz < 0 and 0 < 1/z)
-  local NaN = inf - inf
+  local NaN <const> = inf - inf
   assert(NaN ~= NaN)
   assert(not (NaN < NaN))
   assert(not (NaN <= NaN))
   assert(not (NaN > NaN))
   assert(not (NaN >= NaN))
   assert(not (0 < NaN) and not (NaN < 0))
-  local NaN1 = 0/0
+  local NaN1 <const> = 0/0
   assert(NaN ~= NaN1 and not (NaN <= NaN1) and not (NaN1 <= NaN))
   local a = {}
   assert(not pcall(rawset, a, NaN, 1))
@@ -813,9 +815,9 @@ end
 -- low-level!! For the current implementation of random in Lua,
 -- the first call after seed 1007 should return 0x7a7040a5a323c9d6
 do
-  -- all computations assume at most 32-bit integers
-  local h = 0x7a7040a5   -- higher half
-  local l = 0xa323c9d6   -- lower half
+  -- all computations should work with 32-bit integers
+  local h <const> = 0x7a7040a5   -- higher half
+  local l <const> = 0xa323c9d6   -- lower half
 
   math.randomseed(1007)
   -- get the low 'intbits' of the 64-bit expected result
@@ -838,7 +840,16 @@ do
   assert(rand * 2^floatbits == res)
 end
 
-math.randomseed()
+do
+  -- testing return of 'randomseed'
+  local x, y = math.randomseed()
+  local res = math.random(0)
+  x, y = math.randomseed(x, y)    -- should repeat the state
+  assert(math.random(0) == res)
+  math.randomseed(x, y)    -- again should repeat the state
+  assert(math.random(0) == res)
+  -- keep the random seed for following tests
+end
 
 do   -- test random for floats
   local randbits = math.min(floatbits, 64)   -- at most 64 random bits

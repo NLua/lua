@@ -5,8 +5,8 @@
 
 local version = "Lua 5.4"
 if _VERSION ~= version then
-  warn("This test suite is for ", version,
-        ", not for ", _VERSION, "\nExiting tests")
+  io.stderr:write("This test suite is for ", version,
+                  ", not for ", _VERSION, "\nExiting tests")
   return
 end
 
@@ -37,8 +37,6 @@ end
 -- tests should require debug when needed
 debug = nil
 
-require"bwcoercion"
-
 
 if usertests then
   T = nil    -- no "internal" tests for user tests
@@ -46,13 +44,20 @@ else
   T = rawget(_G, "T")  -- avoid problems with 'strict' module
 end
 
-math.randomseed(0)
 
 --[=[
   example of a long [comment],
   [[spanning several [lines]]]
 
 ]=]
+
+print("\n\tStarting Tests")
+
+do
+  -- set random seed
+  local random_x, random_y = math.randomseed()
+  print(string.format("random seeds: %d, %d", random_x, random_y))
+end
 
 print("current path:\n****" .. package.path .. "****\n")
 
@@ -95,6 +100,8 @@ local function F (m)
   end
 end
 
+local Cstacklevel
+
 local showmem
 if not T then
   local max = 0
@@ -104,6 +111,7 @@ if not T then
     print(format("    ---- total memory: %s, max memory: %s ----\n",
           F(m), F(max)))
   end
+  Cstacklevel = function () return 0 end   -- no info about stack level
 else
   showmem = function ()
     T.checkmemory()
@@ -117,8 +125,15 @@ else
                  T.totalmem"string", T.totalmem"table", T.totalmem"function",
                  T.totalmem"userdata", T.totalmem"thread"))
   end
+
+  Cstacklevel = function ()
+    local _, _, ncalls, nci = T.stacklevel()
+    return ncalls  + nci   -- number of free slots in the C stack
+  end
 end
 
+
+local Cstack = Cstacklevel()
 
 --
 -- redefine dofile to run files through dump/undump
@@ -195,7 +210,12 @@ if #msgs > 0 then
 end
 
 print("(there should be two warnings now)")
+warn("@on")
 warn("#This is ", "an expected", " warning")
+warn("@off")
+warn("******** THIS WARNING SHOULD NOT APPEAR **********")
+warn("******** THIS WARNING ALSO SHOULD NOT APPEAR **********")
+warn("@on")
 warn("#This is", " another one")
 
 -- no test module should define 'debug'
@@ -210,6 +230,10 @@ debug.sethook(function (a) assert(type(a) == 'string') end, "cr")
 
 -- to survive outside block
 _G.showmem = showmem
+
+
+assert(Cstack == Cstacklevel(),
+  "should be at the same C-stack level it was when started the tests")
 
 end   --)
 

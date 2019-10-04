@@ -49,31 +49,11 @@ if not T then
 else --[
 -- testing table sizes
 
-local function log2 (x) return math.log(x, 2) end
 
 local function mp2 (n)   -- minimum power of 2 >= n
-  local mp = 2^math.ceil(log2(n))
+  local mp = 2^math.ceil(math.log(n, 2))
   assert(n == 0 or (mp/2 < n and n <= mp))
   return mp
-end
-
-local function fb (n)
-  local r, nn = T.int2fb(n)
-  assert(r < 256)
-  return nn
-end
-
--- test fb function
-for a = 1, 10000 do   -- all numbers up to 10^4
-  local n = fb(a)
-  assert(a <= n and n <= a*1.125)
-end
-local a = 1024   -- plus a few up to 2 ^30
-local lim = 2^30
-while a < lim do
-  local n = fb(a)
-  assert(a <= n and n <= a*1.125)
-  a = math.ceil(a*1.3)
 end
 
 
@@ -95,30 +75,44 @@ end
 
 
 -- testing constructor sizes
-local lim = 40
-local s = 'return {'
-for i=1,lim do
-  s = s..i..','
-  local s = s
-  for k=0,lim do
-    local t = load(s..'}', '')()
-    assert(#t == i)
-    check(t, fb(i), mp2(k))
-    s = string.format('%sa%d=%d,', s, k, k)
+local sizes = {0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17,
+  30, 31, 32, 33, 34, 500, 1000}
+
+for _, sa in ipairs(sizes) do    -- 'sa' is size of the array part
+  local arr = {"return {"}
+  for i = 1, sa do arr[1 + i] = "1," end    -- build array part
+  for _, sh in ipairs(sizes) do    -- 'sh' is size of the hash part
+    for j = 1, sh do   -- build hash part
+      arr[1 + sa + j] = string.format('k%x=%d,', j, j)
+    end
+    arr[1 + sa + sh + 1] = "}"
+    local prog = table.concat(arr)
+    local f = assert(load(prog))
+    f()    -- call once to ensure stack space
+    -- make sure table is not resized after being created
+    if sa == 0 or sh == 0 then
+      T.alloccount(2);  -- header + array or hash part
+    else
+      T.alloccount(3);  -- header + array part + hash part
+    end
+    local t = f()
+    T.alloccount();
+    assert(#t == sa)
+    check(t, sa, mp2(sh))
   end
 end
 
 
 -- tests with unknown number of elements
 local a = {}
-for i=1,lim do a[i] = i end   -- build auxiliary table
-for k=0,lim do
-  local a = {table.unpack(a,1,k)}
-  assert(#a == k)
-  check(a, k, 0)
-  a = {1,2,3,table.unpack(a,1,k)}
-  check(a, k+3, 0)
-  assert(#a == k + 3)
+for i=1,sizes[#sizes] do a[i] = i end   -- build auxiliary table
+for k in ipairs(sizes) do
+  local t = {table.unpack(a,1,k)}
+  assert(#t == k)
+  check(t, k, 0)
+  t = {1,2,3,table.unpack(a,1,k)}
+  check(t, k+3, 0)
+  assert(#t == k + 3)
 end
 
 
@@ -677,7 +671,8 @@ collectgarbage()
 
 local function f (n, p)
   local t = {}; for i=1,p do t[i] = i*10 end
-  return function (_,n)
+  return function (_, n, ...)
+           assert(select("#", ...) == 0)  -- no extra arguments
            if n > 0 then
              n = n-1
              return n, table.unpack(t)

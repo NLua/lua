@@ -241,6 +241,23 @@ assert(a == 20 and b == false)
 a,b = T.testC("compare LE 5 -6, return 2", a1, 2, 2, a1, 2, 20)
 assert(a == 20 and b == true)
 
+
+do  -- testing lessthan and lessequal with metamethods
+  local mt = {__lt = function (a,b) return a[1] < b[1] end,
+              __le = function (a,b) return a[1] <= b[1] end,
+              __eq = function (a,b) return a[1] == b[1] end}
+  local function O (x)
+    return setmetatable({x}, mt)
+  end
+
+  local a, b = T.testC("compare LT 2 3; pushint 10; return 2", O(1), O(2))
+  assert(a == true and b == 10)
+  local a, b = T.testC("compare LE 2 3; pushint 10; return 2", O(3), O(2))
+  assert(a == false and b == 10)
+  local a, b = T.testC("compare EQ 2 3; pushint 10; return 2", O(3), O(3))
+  assert(a == true and b == 10)
+end
+
 -- testing length
 local t = setmetatable({x = 20}, {__len = function (t) return t.x end})
 a,b,c = T.testC([[
@@ -354,8 +371,11 @@ assert(to("topointer", nil) == null)
 assert(to("topointer", "abc") ~= null)
 assert(to("topointer", string.rep("x", 10)) ==
        to("topointer", string.rep("x", 10)))    -- short strings
-assert(to("topointer", string.rep("x", 300)) ~=
-       to("topointer", string.rep("x", 300)))    -- long strings
+do    -- long strings
+  local s1 = string.rep("x", 300)
+  local s2 = string.rep("x", 300)
+  assert(to("topointer", s1) ~= to("topointer", s2))
+end
 assert(to("topointer", T.pushuserdata(20)) ~= null)
 assert(to("topointer", io.read) ~= null)           -- light C function
 assert(to("topointer", hfunc) ~= null)        -- "heavy" C function
@@ -498,7 +518,53 @@ do   -- getp/setp
   local a = {}
   T.testC("rawsetp 2 1", a, 20)
   assert(a[T.pushuserdata(1)] == 20)
-  assert(T.testC("rawgetp 2 1; return 1", a) == 20)
+  assert(T.testC("rawgetp -1 1; return 1", a) == 20)
+end
+
+
+do  -- using the table itself as index
+  local a = {}
+  a[a] = 10
+  local prog = "gettable -1; return *"
+  local res = {T.testC(prog, a)}
+  assert(#res == 2 and res[1] == prog and res[2] == 10)
+
+  local prog = "settable -2; return *"
+  local res = {T.testC(prog, a, 20)}
+  assert(a[a] == 20)
+  assert(#res == 1 and res[1] == prog)
+
+  -- raw
+  a[a] = 10
+  local prog = "rawget -1; return *"
+  local res = {T.testC(prog, a)}
+  assert(#res == 2 and res[1] == prog and res[2] == 10)
+
+  local prog = "rawset -2; return *"
+  local res = {T.testC(prog, a, 20)}
+  assert(a[a] == 20)
+  assert(#res == 1 and res[1] == prog)
+
+  -- using the table as the value to set
+  local prog = "rawset -1; return *"
+  local res = {T.testC(prog, 30, a)}
+  assert(a[30] == a)
+  assert(#res == 1 and res[1] == prog)
+
+  local prog = "settable -1; return *"
+  local res = {T.testC(prog, 40, a)}
+  assert(a[40] == a)
+  assert(#res == 1 and res[1] == prog)
+
+  local prog = "rawseti -1 100; return *"
+  local res = {T.testC(prog, a)}
+  assert(a[100] == a)
+  assert(#res == 1 and res[1] == prog)
+
+  local prog = "seti -1 200; return *"
+  local res = {T.testC(prog, a)}
+  assert(a[200] == a)
+  assert(#res == 1 and res[1] == prog)
 end
 
 a = {x=0, y=12}
@@ -632,7 +698,7 @@ for k, v in ipairs(t) do
   assert(v1 == v and p)
 end
 
-assert(debug.getuservalue(4) == nil)
+assert(not debug.getuservalue(4))
 
 debug.setuservalue(b, function () return 10 end, 10)
 collectgarbage()   -- function should not be collected
@@ -911,6 +977,7 @@ assert(t[7] == nil)
 
 -------------------------------------------------------------------------
 do   -- testing errors during GC
+  warn("@off")
   collectgarbage("stop")
   local a = {}
   for i=1,20 do
@@ -928,6 +995,7 @@ do   -- testing errors during GC
   collectgarbage()
   assert(A == 10)  -- number of normal collections
   collectgarbage("restart")
+  warn("@on")
 end
 -------------------------------------------------------------------------
 -- test for userdata vals
@@ -1030,7 +1098,7 @@ do
   assert(type(a[1]) == "string" and a[2][1] == 11)
   assert(#openresource == 0)    -- was closed
 
-  -- error
+  -- closing by error
   local a, b = pcall(T.makeCfunc[[
     call 0 1   # create resource
     toclose -1 # mark it to be closed
@@ -1038,6 +1106,15 @@ do
   ]], newresource)
   assert(a == false and b[1] == 11)
   assert(#openresource == 0)    -- was closed
+
+  -- non-closable value
+  local a, b = pcall(T.makeCfunc[[
+    newtable   # create non-closable object
+    toclose -1 # mark it to be closed (shoud raise an error)
+    abort  # will not be executed
+  ]])
+  assert(a == false and
+    string.find(b, "non%-closable value"))
 
   local function check (n)
     assert(#openresource == n)
@@ -1137,7 +1214,7 @@ end)
 testamem("to-be-closed variables", function()
   local flag
   do
-    local <toclose> x =
+    local x <close> =
               setmetatable({}, {__close = function () flag = true end})
     flag = false
     local x = {}

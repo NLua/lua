@@ -211,15 +211,15 @@ assert(a==1 and b==nil)
 print'+';
 
 do   -- testing constants
-  local <const> prog = [[local <XXX> x = 10]]
+  local prog <const> = [[local x <XXX> = 10]]
   checkload(prog, "unknown attribute 'XXX'")
 
-  checkload([[local <const> xxx = 20; xxx = 10]],
+  checkload([[local xxx <const> = 20; xxx = 10]],
              ":1: attempt to assign to const variable 'xxx'")
 
   checkload([[
     local xx;
-    local <const> xxx = 20;
+    local xxx <const> = 20;
     local yyy;
     local function foo ()
       local abc = xx + yyy + xxx;
@@ -228,7 +228,7 @@ do   -- testing constants
   ]], ":6: attempt to assign to const variable 'xxx'")
 
   checkload([[
-    local <toclose> x = nil
+    local x <close> = nil
     x = io.open()
   ]], ":2: attempt to assign to const variable 'x'")
 end
@@ -287,7 +287,7 @@ a,b = F(nil)==nil; assert(a == true and b == nil)
 ------------------------------------------------------------------
 
 -- sometimes will be 0, sometimes will not...
-_ENV.GLOB1 = math.floor(os.time()) % 2
+_ENV.GLOB1 = math.random(0, 1)
 
 -- basic expressions with their respective values
 local basiccases = {
@@ -298,16 +298,36 @@ local basiccases = {
   {"(0==_ENV.GLOB1)", 0 == _ENV.GLOB1},
 }
 
+local prog
+
+if _ENV.GLOB1 == 0 then
+  basiccases[2][1] = "F"   -- constant false
+
+  prog = [[
+    local F <const> = false
+    if %s then IX = true end
+    return %s
+]]
+else
+  basiccases[4][1] = "k10"   -- constant 10
+
+  prog = [[
+    local k10 <const> = 10
+    if %s then IX = true end
+    return %s
+  ]]
+end
+
 print('testing short-circuit optimizations (' .. _ENV.GLOB1 .. ')')
 
 
 -- operators with their respective values
-local <const> binops = {
+local binops <const> = {
   {" and ", function (a,b) if not a then return a else return b end end},
   {" or ", function (a,b) if a then return a else return b end end},
 }
 
-local <const> cases = {}
+local cases <const> = {}
 
 -- creates all combinations of '(cases[i] op cases[n-i])' plus
 -- 'not(cases[i] op cases[n-i])' (syntax + value)
@@ -336,8 +356,6 @@ local level = _soft and 3 or 4
 cases[1] = basiccases
 for i = 2, level do cases[i] = createcases(i) end
 print("+")
-
-local prog = [[if %s then IX = true end; return %s]]
 
 local i = 0
 for n = 1, level do

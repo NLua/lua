@@ -312,7 +312,7 @@ so changing its value will affect only your own code.)
 
 <p>
 When Lua loads a chunk,
-the default value for its <code>_ENV</code> upvalue
+the default value for its <code>_ENV</code> variable
 is the global environment (see <a href="#pdf-load"><code>load</code></a>).
 Therefore, by default,
 free names in Lua code refer to entries in the global environment
@@ -322,7 +322,7 @@ and some functions there operate on that environment.
 You can use <a href="#pdf-load"><code>load</code></a> (or <a href="#pdf-loadfile"><code>loadfile</code></a>)
 to load a chunk with a different environment.
 (In C, you have to load the chunk and then change the value
-of its first upvalue.)
+of its first upvalue; see <a href="#lua_setupvalue"><code>lua_setupvalue</code></a>.)
 
 
 
@@ -1493,7 +1493,7 @@ As such, chunks can define local variables,
 receive arguments, and return values.
 Moreover, such anonymous function is compiled as in the
 scope of an external local variable called <code>_ENV</code> (see <a href="#2.2">&sect;2.2</a>).
-The resulting function always has <code>_ENV</code> as its only upvalue,
+The resulting function always has <code>_ENV</code> as its only external variable,
 even if it does not use that variable.
 
 
@@ -1713,25 +1713,36 @@ they must all result in numbers.
 Their values are called respectively
 the <em>initial value</em>, the <em>limit</em>, and the <em>step</em>.
 If the step is absent, it defaults to&nbsp;1.
-Then the loop body is repeated with the value of the control variable
+
+
+<p>
+If both the initial value and the step are integers,
+the loop is done with integers;
+note that the limit may not be an integer.
+Otherwise, the loop is done with floats.
+(Beware of floating-point accuracy in this case.)
+
+
+<p>
+After that initialization,
+the loop body is repeated with the value of the control variable
 going through an arithmetic progression,
 starting at the initial value,
-with a common difference given by the step,
-until that value passes the limit.
+with a common difference given by the step.
 A negative step makes a decreasing sequence;
 a step equal to zero raises an error.
+The loop continues while the value is less than
+or equal to the limit
+(greater than or equal to for a negative step).
 If the initial value is already greater than the limit
 (or less than, if the step is negative),
 the body is not executed.
 
 
 <p>
-If both the initial value and the step are integers,
-the loop is done with integers;
-in this case, the range of the control variable is clipped
-by the range of integers.
-Otherwise, the loop is done with floats.
-(Beware of floating-point accuracy in this case.)
+For integer loops,
+the control variable never wraps around;
+instead, the loop ends in case of an overflow.
 
 
 <p>
@@ -1827,19 +1838,27 @@ Local variables can be declared anywhere inside a block.
 The declaration can include an initialization:
 
 <pre>
-	stat ::= <b>local</b> namelist [&lsquo;<b>=</b>&rsquo; explist]
-	stat ::=  <b>local</b> &lsquo;<b>&lt;</b>&rsquo; Name &lsquo;<b>&gt;</b>&rsquo; Name &lsquo;<b>=</b>&rsquo; exp </pre><p>
+	stat ::= <b>local</b> attnamelist [&lsquo;<b>=</b>&rsquo; explist]
+	attnamelist ::=  Name attrib {&lsquo;<b>,</b>&rsquo; Name attrib}
+</pre><p>
 If present, an initial assignment has the same semantics
 of a multiple assignment (see <a href="#3.3.3">&sect;3.3.3</a>).
 Otherwise, all variables are initialized with <b>nil</b>.
-The second syntax declares a local with a given attribute,
-which is the name between the angle brackets.
-In this case, there must be an initialization.
+
+
+<p>
+Each variable name may be postfixed by an attribute
+(a name between angle brackets):
+
+<pre>
+	attrib ::= [&lsquo;<b>&lt;</b>&rsquo; Name &lsquo;<b>&gt;</b>&rsquo;]
+</pre><p>
 There are two possible attributes:
 <code>const</code>, which declares a constant variable,
 that is, a variable that cannot be assigned to
 after its initialization;
-and <code>toclose</code>, which declares a to-be-closed variable (see <a href="#3.3.8">&sect;3.3.8</a>).
+and <code>close</code>, which declares a to-be-closed variable (see <a href="#3.3.8">&sect;3.3.8</a>).
+A list of variables can contain at most one to-be-closed variable.
 
 
 <p>
@@ -1857,11 +1876,6 @@ The visibility rules for local variables are explained in <a href="#3.5">&sect;3
 <h3>3.3.8 &ndash; <a name="3.3.8">To-be-closed Variables</a></h3>
 
 <p>
-A local variable can be declared as a <em>to-be-closed</em> variable,
-using the identifier <code>toclose</code> as its attribute:
-
-<pre>
-	stat ::=  <b>local</b> &lsquo;<b>&lt;</b>&rsquo; <code>toclose</code> &lsquo;<b>&gt;</b>&rsquo; Name &lsquo;<b>=</b>&rsquo; exp </pre><p>
 A to-be-closed variable behaves like a constant local variable,
 except that its value is <em>closed</em> whenever the variable
 goes out of scope, including normal block termination,
@@ -1872,14 +1886,18 @@ or exiting by an error.
 <p>
 Here, to <em>close</em> a value means
 to call its <code>__close</code> metamethod.
-If the value is <b>nil</b>, it is ignored;
-otherwise,
-if it does not have a <code>__close</code> metamethod,
-an error is raised.
 When calling the metamethod,
 the value itself is passed as the first argument
-and the error object (if any) is passed as a second argument;
+and the error object that caused the exit (if any)
+is passed as a second argument;
 if there was no error, the second argument is <b>nil</b>.
+
+
+<p>
+The value assigned to a to-be-closed variable
+must have a <code>__close</code> metamethod
+or be a false value.
+(<b>nil</b> and <b>false</b> are ignored as to-be-closed values.)
 
 
 <p>
@@ -1890,25 +1908,30 @@ they are closed in the reverse order that they were declared.
 <p>
 If there is any error while running a closing method,
 that error is handled like an error in the regular code
-where the variable was defined;
-in particular,
-the other pending closing methods will still be called.
-After an error,
-other errors in closing methods
-interrupt the respective method,
-but are otherwise ignored;
-the error reported is the original one.
+where the variable was defined.
+However, Lua may call the method one more time.
 
 
 <p>
-If a coroutine yields inside a block and is never resumed again,
-the variables visible at that block will never go out of scope,
+After an error,
+the other pending closing methods will still be called.
+Errors in these methods
+interrupt the respective method and generate a warning,
+but are otherwise ignored;
+the error reported is only the original one.
+
+
+<p>
+If a coroutine yields and is never resumed again,
+some variables may never go out of scope,
 and therefore they will never be closed.
+(These variables are the ones created inside the coroutine
+and in scope at the point where the coroutine yielded.)
 Similarly, if a coroutine ends with an error,
 it does not unwind its stack,
 so it does not close any variable.
 In both cases,
-you should either use finalizers
+you can either use finalizers
 or call <a href="#pdf-coroutine.close"><code>coroutine.close</code></a> to close the variables.
 However, if the coroutine was created
 through <a href="#pdf-coroutine.wrap"><code>coroutine.wrap</code></a>,
@@ -2718,8 +2741,8 @@ and so the second <code>x</code> refers to the outside variable.
 Because of the lexical scoping rules,
 local variables can be freely accessed by functions
 defined inside their scope.
-A local variable used by an inner function is called
-an <em>upvalue</em>, or <em>external local variable</em>,
+A local variable used by an inner function is called an <em>upvalue</em>
+(or <em>external local variable</em>, or simply <em>external variable</em>)
 inside the inner function.
 
 
@@ -2731,9 +2754,9 @@ Consider the following example:
 <pre>
      a = {}
      local x = 20
-     for i=1,10 do
+     for i = 1, 10 do
        local y = 0
-       a[i] = function () y=y+1; return x+y end
+       a[i] = function () y = y + 1; return x + y end
      end
 </pre><p>
 The loop creates ten closures
@@ -3535,8 +3558,9 @@ it is left unchanged.
 <pre>void lua_close (lua_State *L);</pre>
 
 <p>
-Destroys all objects in the given Lua state
-(calling the corresponding garbage-collection metamethods, if any)
+Close all active to-be-closed variables in the main thread,
+release all objects in the given Lua state
+(calling the corresponding garbage-collection metamethods, if any),
 and frees all dynamic memory used by this state.
 
 
@@ -5097,11 +5121,16 @@ Returns 0 if the userdata does not have that value.
 
 <hr><h3><a name="lua_setmetatable"><code>lua_setmetatable</code></a></h3><p>
 <span class="apii">[-1, +0, &ndash;]</span>
-<pre>void lua_setmetatable (lua_State *L, int index);</pre>
+<pre>int lua_setmetatable (lua_State *L, int index);</pre>
 
 <p>
 Pops a table from the stack and
 sets it as the new metatable for the value at the given index.
+
+
+<p>
+(For historical reasons, this function returns an <code>int</code>,
+which now is always 1.)
 
 
 
@@ -5274,7 +5303,7 @@ by any other function in the API except <a href="#lua_settop"><code>lua_settop</
 
 <p>
 This function should not be called for an index
-that is equal to or below an already marked to-be-closed index.
+that is equal to or below an active to-be-closed index.
 
 
 <p>
@@ -5527,6 +5556,10 @@ indicates whether the message is
 to be continued by the message in the next call.
 
 
+<p>
+See <a href="#pdf-warn"><code>warn</code></a> for more details about warnings.
+
+
 
 
 
@@ -5538,6 +5571,10 @@ to be continued by the message in the next call.
 Emits a warning with the given message.
 A message in a call with <code>tocont</code> true should be
 continued in another call to this function.
+
+
+<p>
+See <a href="#pdf-warn"><code>warn</code></a> for more details about warnings.
 
 
 
@@ -6011,11 +6048,7 @@ when the index <code>n</code> is greater than the number of upvalues.
 
 
 <p>
-For C&nbsp;functions, this function uses the empty string <code>""</code>
-as a name for all upvalues.
-(For Lua functions,
-upvalues are the external local variables that the function uses,
-and that are consequently included in its closure.)
+See <a href="#pdf-debug.getupvalue"><code>debug.getupvalue</code></a> for more information about upvalues.
 
 
 
@@ -6064,6 +6097,24 @@ Only count and line events can yield;
 to yield, a hook function must finish its execution
 calling <a href="#lua_yield"><code>lua_yield</code></a> with <code>nresults</code> equal to zero
 (that is, with no values).
+
+
+
+
+
+<hr><h3><a name="lua_setcstacklimit"><code>lua_setcstacklimit</code></a></h3><p>
+<span class="apii">[-0, +0, &ndash;]</span>
+<pre>int (lua_setcstacklimit) (lua_State *L, unsigned int limit);</pre>
+
+<p>
+Sets a new limit for the C stack.
+This limit controls how deeply nested calls can go in Lua,
+with the intent of avoiding a stack overflow.
+Returns the old limit in case of success,
+or zero in case of error.
+For more details about this function,
+see <a href="#pdf-debug.setcstacklimit"><code>debug.setcstacklimit</code></a>,
+its equivalent in the standard library.
 
 
 
@@ -7352,7 +7403,7 @@ that will be called to close the stream
 when the handle is closed or collected;
 this function receives the file handle as its sole argument and
 must return either <b>true</b>, in case of success,
-or <b>nil</b> plus an error message, in case of error.
+or a false value plus an error message, in case of error.
 Once Lua calls this field,
 it changes the field value to <code>NULL</code>
 to signal that the handle is closed.
@@ -7508,6 +7559,15 @@ these library functions do not adjust its number of arguments
 to its expected parameters.
 For instance, a function documented as <code>foo(arg)</code>
 should not be called without an argument.
+
+
+<p>
+The notation <b>fail</b> means a return value representing
+some kind of failure or the absence of a better value to return.
+Currently, <b>fail</b> is equal to <b>nil</b>,
+but that may change in future versions.
+The recommendation is to test the success of these functions
+with <code>(not status)</code>, instead of <code>(status == nil)</code>.
 
 
 <p>
@@ -7754,8 +7814,8 @@ A return of an empty string, <b>nil</b>, or no value signals the end of the chun
 
 <p>
 If there are no syntactic errors,
-returns the compiled chunk as a function;
-otherwise, returns <b>nil</b> plus the error message.
+<code>load</code> returns the compiled chunk as a function;
+otherwise, it returns <b>fail</b> plus the error message.
 
 
 <p>
@@ -8012,7 +8072,7 @@ When called with no <code>base</code>,
 If the argument is already a number or
 a string convertible to a number,
 then <code>tonumber</code> returns this number;
-otherwise, it returns <b>nil</b>.
+otherwise, it returns <b>fail</b>.
 
 
 <p>
@@ -8030,7 +8090,7 @@ In bases above&nbsp;10, the letter '<code>A</code>' (in either upper or lower ca
 represents&nbsp;10, '<code>B</code>' represents&nbsp;11, and so forth,
 with '<code>Z</code>' representing 35.
 If the string <code>e</code> is not a valid numeral in the given base,
-the function returns <b>nil</b>.
+the function returns <b>fail</b>.
 
 
 
@@ -8087,6 +8147,18 @@ The current value of this variable is "<code>Lua 5.4</code>".
 <p>
 Emits a warning with a message composed by the concatenation
 of all its arguments (which should be strings).
+
+
+<p>
+By convention,
+a one-piece message starting with '<code>@</code>'
+is intended to be a <em>control message</em>,
+which is a message to the warning system itself.
+In particular, the standard warning function in Lua
+recognizes the control messages "<code>@off</code>",
+to stop the emission of warnings,
+and "<code>@on</code>", to (re)start the emission;
+it ignores unknown control messages.
 
 
 
@@ -8607,7 +8679,7 @@ will try to open the files
 <p>
 Returns the resulting name of the first file that it can
 open in read mode (after closing the file),
-or <b>nil</b> plus an error message if none succeeds.
+or <b>fail</b> plus an error message if none succeeds.
 (This error message lists all file names it tried to open.)
 
 
@@ -8710,7 +8782,7 @@ Looks for the first match of
 <code>pattern</code> (see <a href="#6.4.1">&sect;6.4.1</a>) in the string <code>s</code>.
 If it finds a match, then <code>find</code> returns the indices of&nbsp;<code>s</code>
 where this occurrence starts and ends;
-otherwise, it returns <b>nil</b>.
+otherwise, it returns <b>fail</b>.
 A third, optional numeric argument <code>init</code> specifies
 where to start the search;
 its default value is&nbsp;1 and can be negative.
@@ -8718,7 +8790,6 @@ A value of <b>true</b> as a fourth, optional argument <code>plain</code>
 turns off the pattern matching facilities,
 so the function does a plain "find substring" operation,
 with no characters in <code>pattern</code> being considered magic.
-Note that if <code>plain</code> is given, then <code>init</code> must be given as well.
 
 
 <p>
@@ -8953,7 +9024,7 @@ Looks for the first <em>match</em> of
 the <code>pattern</code> (see <a href="#6.4.1">&sect;6.4.1</a>) in the string <code>s</code>.
 If it finds one, then <code>match</code> returns
 the captures from the pattern;
-otherwise it returns <b>nil</b>.
+otherwise it returns <b>fail</b>.
 If <code>pattern</code> specifies no captures,
 then the whole match is returned.
 A third, optional numeric argument <code>init</code> specifies
@@ -9277,7 +9348,7 @@ and the part matching "<code>%s*</code>" has number&nbsp;3.
 
 
 <p>
-As a special case, the empty capture <code>()</code> captures
+As a special case, the capture <code>()</code> captures
 the current string position (a number).
 For instance, if we apply the pattern <code>"()aa()"</code> on the
 string <code>"flaaap"</code>, there will be two captures: 3&nbsp;and&nbsp;5.
@@ -9516,7 +9587,7 @@ Returns the number of UTF-8 characters in string <code>s</code>
 that start between positions <code>i</code> and <code>j</code> (both inclusive).
 The default for <code>i</code> is 1 and for <code>j</code> is -1.
 If it finds any invalid byte sequence,
-returns a false value plus the position of the first invalid byte.
+returns <b>fail</b> plus the position of the first invalid byte.
 
 
 
@@ -9536,7 +9607,7 @@ so that <code>utf8.offset(s, -n)</code> gets the offset of the
 <code>n</code>-th character from the end of the string.
 If the specified character is neither in the subject
 nor right after its end,
-the function returns <b>nil</b>.
+the function returns <b>fail</b>.
 
 
 <p>
@@ -9972,6 +10043,15 @@ The default for <code>y</code> is zero.
 When called with no arguments,
 Lua generates a seed with
 a weak attempt for randomness.
+
+
+<p>
+This function returns the two seed components
+that were effectively used,
+so that setting them again repeats the sequence.
+
+
+<p>
 To ensure a required level of randomness to the initial state
 (or contrarily, to have a deterministic sequence,
 for instance when debugging a program),
@@ -10018,7 +10098,7 @@ Returns the tangent of <code>x</code> (assumed to be in radians).
 <p>
 If the value <code>x</code> is convertible to an integer,
 returns that integer.
-Otherwise, returns <b>nil</b>.
+Otherwise, returns <b>fail</b>.
 
 
 
@@ -10030,7 +10110,7 @@ Otherwise, returns <b>nil</b>.
 <p>
 Returns "<code>integer</code>" if <code>x</code> is an integer,
 "<code>float</code>" if it is a float,
-or <b>nil</b> if <code>x</code> is not a number.
+or <b>fail</b> if <code>x</code> is not a number.
 
 
 
@@ -10084,10 +10164,10 @@ The I/O library never closes these files.
 
 <p>
 Unless otherwise stated,
-all I/O functions return <b>nil</b> on failure,
+all I/O functions return <b>fail</b> on failure,
 plus an error message as a second result and
 a system-dependent error code as a third result,
-and some value different from <b>nil</b> on success.
+and some non-false value on success.
 On non-POSIX systems,
 the computation of the error message and error code
 in case of errors
@@ -10144,8 +10224,8 @@ instead of returning an error code.
 Opens the given file name in read mode
 and returns an iterator function that
 works like <code>file:lines(&middot;&middot;&middot;)</code> over the opened file.
-When the iterator function detects the end of file,
-it returns no values (to finish the loop) and automatically closes the file.
+When the iterator function fails to read any value,
+it automatically closes the file.
 Besides the iterator function,
 <code>io.lines</code> returns three other values:
 two <b>nil</b> values as placeholders,
@@ -10163,7 +10243,8 @@ In this case, the iterator does not close the file when the loop ends.
 
 
 <p>
-In case of errors this function raises the error,
+In case of errors opening the file,
+this function raises the error,
 instead of returning an error code.
 
 
@@ -10258,7 +10339,7 @@ and it is automatically removed when the program ends.
 Checks whether <code>obj</code> is a valid file handle.
 Returns the string <code>"file"</code> if <code>obj</code> is an open file handle,
 <code>"closed file"</code> if <code>obj</code> is a closed file handle,
-or <b>nil</b> if <code>obj</code> is not a file handle.
+or <b>fail</b> if <code>obj</code> is not a file handle.
 
 
 
@@ -10323,11 +10404,6 @@ Unlike <a href="#pdf-io.lines"><code>io.lines</code></a>, this function does not
 when the loop ends.
 
 
-<p>
-In case of errors this function raises the error,
-instead of returning an error code.
-
-
 
 
 <p>
@@ -10339,7 +10415,7 @@ Reads the file <code>file</code>,
 according to the given formats, which specify what to read.
 For each format,
 the function returns a string or a number with the characters read,
-or <b>nil</b> if it cannot read data with the specified format.
+or <b>fail</b> if it cannot read data with the specified format.
 (In this latter case,
 the function does not read subsequent formats.)
 When called without arguments,
@@ -10361,31 +10437,32 @@ is a valid prefix for a numeral;
 if that prefix does not form a valid numeral
 (e.g., an empty string, "<code>0x</code>", or "<code>3.4e-</code>")
 or it is too long (more than 200 characters),
-it is discarded and the format returns <b>nil</b>.
+it is discarded and the format returns <b>fail</b>.
 </li>
 
 <li><b>"<code>a</code>": </b>
 reads the whole file, starting at the current position.
-On end of file, it returns the empty string.
+On end of file, it returns the empty string;
+this format never fails.
 </li>
 
 <li><b>"<code>l</code>": </b>
 reads the next line skipping the end of line,
-returning <b>nil</b> on end of file.
+returning <b>fail</b> on end of file.
 This is the default format.
 </li>
 
 <li><b>"<code>L</code>": </b>
 reads the next line keeping the end-of-line character (if present),
-returning <b>nil</b> on end of file.
+returning <b>fail</b> on end of file.
 </li>
 
 <li><b><em>number</em>: </b>
 reads a string with up to this number of bytes,
-returning <b>nil</b> on end of file.
+returning <b>fail</b> on end of file.
 If <code>number</code> is zero,
 it reads nothing and returns an empty string,
-or <b>nil</b> on end of file.
+or <b>fail</b> on end of file.
 </li>
 
 </ul><p>
@@ -10411,7 +10488,7 @@ specified by the string <code>whence</code>, as follows:
 </ul><p>
 In case of success, <code>seek</code> returns the final file position,
 measured in bytes from the beginning of the file.
-If <code>seek</code> fails, it returns <b>nil</b>,
+If <code>seek</code> fails, it returns <b>fail</b>,
 plus a string describing the error.
 
 
@@ -10433,31 +10510,25 @@ end of the file, and returns its size.
 
 
 <p>
-Sets the buffering mode for an output file.
+Sets the buffering mode for a file.
 There are three available modes:
 
 <ul>
+<li><b>"<code>no</code>": </b> no buffering.</li>
+<li><b>"<code>full</code>": </b> full buffering.</li>
+<li><b>"<code>line</code>": </b> line buffering.</li>
+</ul>
 
-<li><b>"<code>no</code>": </b>
-no buffering; the result of any output operation appears immediately.
-</li>
-
-<li><b>"<code>full</code>": </b>
-full buffering; output operation is performed only
-when the buffer is full or when
-you explicitly <code>flush</code> the file (see <a href="#pdf-io.flush"><code>io.flush</code></a>).
-</li>
-
-<li><b>"<code>line</code>": </b>
-line buffering; output is buffered until a newline is output
-or there is any input from some special files
-(such as a terminal device).
-</li>
-
-</ul><p>
+<p>
 For the last two cases,
 <code>size</code> is a hint for the size of the buffer, in bytes.
 The default is an appropriate size.
+
+
+<p>
+The specific behavior of each mode is non portable;
+check the underlying ISO&nbsp;C function <code>setvbuf</code> in your platform for
+more details.
 
 
 
@@ -10473,7 +10544,6 @@ The arguments must be strings or numbers.
 
 <p>
 In case of success, this function returns <code>file</code>.
-Otherwise it returns <b>nil</b> plus a string describing the error.
 
 
 
@@ -10538,7 +10608,7 @@ formatted according to the same rules as the ISO&nbsp;C function <code>strftime<
 
 <p>
 If <code>format</code> is absent, it defaults to "<code>%c</code>",
-which gives a reasonable date and time representation
+which gives a human-readable date and time representation
 using the current locale.
 
 
@@ -10573,7 +10643,7 @@ This function is equivalent to the ISO&nbsp;C function <code>system</code>.
 It passes <code>command</code> to be executed by an operating system shell.
 Its first result is <b>true</b>
 if the command terminated successfully,
-or <b>nil</b> otherwise.
+or <b>fail</b> otherwise.
 After this first result
 the function returns a string plus a number,
 as follows:
@@ -10627,7 +10697,7 @@ closes the Lua state before exiting.
 
 <p>
 Returns the value of the process environment variable <code>varname</code>,
-or <b>nil</b> if the variable is not defined.
+or <b>fail</b> if the variable is not defined.
 
 
 
@@ -10639,7 +10709,7 @@ or <b>nil</b> if the variable is not defined.
 <p>
 Deletes the file (or empty directory, on POSIX systems)
 with the given name.
-If this function fails, it returns <b>nil</b>,
+If this function fails, it returns <b>fail</b>
 plus a string describing the error and the error code.
 Otherwise, it returns true.
 
@@ -10652,7 +10722,7 @@ Otherwise, it returns true.
 
 <p>
 Renames the file or directory named <code>oldname</code> to <code>newname</code>.
-If this function fails, it returns <b>nil</b>,
+If this function fails, it returns <b>fail</b>,
 plus a string describing the error and the error code.
 Otherwise, it returns true.
 
@@ -10671,7 +10741,7 @@ Sets the current locale of the program.
 <code>"monetary"</code>, <code>"numeric"</code>, or <code>"time"</code>;
 the default category is <code>"all"</code>.
 The function returns the name of the new locale,
-or <b>nil</b> if the request cannot be honored.
+or <b>fail</b> if the request cannot be honored.
 
 
 <p>
@@ -10829,6 +10899,10 @@ and the current hook count,
 as set by the <a href="#pdf-debug.sethook"><code>debug.sethook</code></a> function.
 
 
+<p>
+Returns <b>fail</b> if there is no active hook.
+
+
 
 
 <p>
@@ -10846,7 +10920,7 @@ level&nbsp;1 is the function that called <code>getinfo</code>
 (except for tail calls, which do not count on the stack);
 and so on.
 If <code>f</code> is a number greater than the number of active functions,
-then <code>getinfo</code> returns <b>nil</b>.
+then <code>getinfo</code> returns <b>fail</b>.
 
 
 <p>
@@ -10890,9 +10964,12 @@ The first parameter or local variable has index&nbsp;1, and so on,
 following the order that they are declared in the code,
 counting only the variables that are active
 in the current scope of the function.
+Compile-time constants may not appear in this listing,
+if they were optimized away by the compiler.
 Negative indices refer to vararg arguments;
 -1 is the first vararg argument.
-The function returns <b>nil</b> if there is no variable with the given index,
+The function returns <b>fail</b>
+if there is no variable with the given index,
 and raises an error when called with a level out of range.
 (You can call <a href="#pdf-debug.getinfo"><code>debug.getinfo</code></a> to check whether the level is valid.)
 
@@ -10939,12 +11016,24 @@ Returns the registry table (see <a href="#4.5">&sect;4.5</a>).
 <p>
 This function returns the name and the value of the upvalue
 with index <code>up</code> of the function <code>f</code>.
-The function returns <b>nil</b> if there is no upvalue with the given index.
+The function returns <b>fail</b>
+if there is no upvalue with the given index.
 
 
 <p>
-Variable names starting with '<code>(</code>' (open parenthesis) 
-represent variables with no known names
+(For Lua functions,
+upvalues are the external local variables that the function uses,
+and that are consequently included in its closure.)
+
+
+<p>
+For C&nbsp;functions, this function uses the empty string <code>""</code>
+as a name for all upvalues.
+
+
+<p>
+Variable name '<code>?</code>' (interrogation mark)
+represents variables with no known names
 (variables from chunks saved without debug information).
 
 
@@ -10958,6 +11047,43 @@ represent variables with no known names
 Returns the <code>n</code>-th user value associated
 to the userdata <code>u</code> plus a boolean,
 <b>false</b> if the userdata does not have that value.
+
+
+
+
+<p>
+<hr><h3><a name="pdf-debug.setcstacklimit"><code>debug.setcstacklimit (limit)</code></a></h3>
+
+
+<p>
+Sets a new limit for the C stack.
+This limit controls how deeply nested calls can go in Lua,
+with the intent of avoiding a stack overflow.
+A limit too small restricts recursive calls pointlessly;
+a limit too large exposes the interpreter to stack-overflow crashes.
+Unfortunately, there is no way to know a priori
+the maximum safe limit for a platform.
+
+
+<p>
+Each call made from Lua code counts one unit.
+Other operations (e.g., calls made from C to Lua or resuming a coroutine)
+may have a higher cost.
+
+
+<p>
+This function has the following restrictions:
+
+<ul>
+<li>It can only be called from the main coroutine (thread);</li>
+<li>It cannot be called while handling a stack-overflow error;</li>
+<li><code>limit</code> must be less than 40000;</li>
+<li><code>limit</code> cannot be less than the amount of C stack in use.</li>
+</ul><p>
+If a call does not respect some restriction,
+it returns <b>false</b>.
+Otherwise,
+the call returns the old limit.
 
 
 
@@ -11011,7 +11137,7 @@ and level&nbsp;1 is the hook function.)
 <p>
 This function assigns the value <code>value</code> to the local variable
 with index <code>local</code> of the function at level <code>level</code> of the stack.
-The function returns <b>nil</b> if there is no local
+The function returns <b>fail</b> if there is no local
 variable with the given index,
 and raises an error when called with a <code>level</code> out of range.
 (You can call <code>getinfo</code> to check whether the level is valid.)
@@ -11044,9 +11170,13 @@ Returns <code>value</code>.
 <p>
 This function assigns the value <code>value</code> to the upvalue
 with index <code>up</code> of the function <code>f</code>.
-The function returns <b>nil</b> if there is no upvalue
+The function returns <b>fail</b> if there is no upvalue
 with the given index.
 Otherwise, it returns the name of the upvalue.
+
+
+<p>
+See <a href="#pdf-debug.getupvalue"><code>debug.getupvalue</code></a> for more information about upvalues.
 
 
 
@@ -11063,7 +11193,7 @@ the <code>n</code>-th user value associated to the given <code>udata</code>.
 
 <p>
 Returns <code>udata</code>,
-or <b>nil</b> if the userdata does not have that value.
+or <b>fail</b> if the userdata does not have that value.
 
 
 
@@ -11145,6 +11275,7 @@ The options are:
 <li><b><code>-i</code>: </b> enters interactive mode after running <em>script</em>;</li>
 <li><b><code>-v</code>: </b> prints version information;</li>
 <li><b><code>-E</code>: </b> ignores environment variables;</li>
+<li><b><code>-W</code>: </b> turn warnings on;</li>
 <li><b><code>--</code>: </b> stops handling options;</li>
 <li><b><code>-</code>: </b> executes <code>stdin</code> as a file and stops handling options.</li>
 </ul><p>
@@ -11176,13 +11307,14 @@ with the default paths defined in <code>luaconf.h</code>.
 
 
 <p>
-All options are handled in order, except <code>-i</code> and <code>-E</code>.
+The options <code>-e</code>, <code>-l</code>, and <code>-W</code> are handled in
+the order they appear.
 For instance, an invocation like
 
 <pre>
-     $ lua -e'a=1' -e 'print(a)' script.lua
+     $ lua -e 'a=1' -llib1 script.lua
 </pre><p>
-will first set <code>a</code> to 1, then print the value of <code>a</code>,
+will first set <code>a</code> to 1, then require the library <code>lib1</code>,
 and finally run the file <code>script.lua</code> with no arguments.
 (Here <code>$</code> is the shell prompt. Your prompt may be different.)
 
@@ -11253,7 +11385,8 @@ has a metamethod <code>__tostring</code>,
 the interpreter calls this metamethod to produce the final message.
 Otherwise, the interpreter converts the error object to a string
 and adds a stack traceback to it.
-Warnings are simply printed in the standard error output.
+When warnings are on,
+they are simply printed in the standard error output.
 
 
 <p>
@@ -11503,8 +11636,11 @@ and LiteralString, see <a href="#3.1">&sect;3.1</a>.)
 		 <b>for</b> namelist <b>in</b> explist <b>do</b> block <b>end</b> | 
 		 <b>function</b> funcname funcbody | 
 		 <b>local</b> <b>function</b> Name funcbody | 
-		 <b>local</b> namelist [&lsquo;<b>=</b>&rsquo; explist] | 
-		 <b>local</b> &lsquo;<b>&lt;</b>&rsquo; Name &lsquo;<b>&gt;</b>&rsquo; Name &lsquo;<b>=</b>&rsquo; exp 
+		 <b>local</b> attnamelist [&lsquo;<b>=</b>&rsquo; explist] 
+
+	attnamelist ::=  Name attrib {&lsquo;<b>,</b>&rsquo; Name attrib}
+
+	attrib ::= [&lsquo;<b>&lt;</b>&rsquo; Name &lsquo;<b>&gt;</b>&rsquo;]
 
 	retstat ::= <b>return</b> [explist] [&lsquo;<b>;</b>&rsquo;]
 
@@ -11562,10 +11698,10 @@ and LiteralString, see <a href="#3.1">&sect;3.1</a>.)
 
 <P CLASS="footer">
 Last update:
-Thu Jun  6 15:59:35 -03 2019
+Wed Oct  2 21:30:38 UTC 2019
 </P>
 <!--
-Last change: revised for Lua 5.4.0 (alpha)
+Last change: revised for Lua 5.4.0 (beta)
 -->
 
 </body></html>

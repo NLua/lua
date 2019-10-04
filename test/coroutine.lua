@@ -151,7 +151,7 @@ do
   end
 
   co = coroutine.create(function ()
-    local <toclose> x = func2close(function (self, err)
+    local x <close> = func2close(function (self, err)
       assert(err == nil); X = false
     end)
     X = true
@@ -163,21 +163,30 @@ do
   assert(not X and coroutine.status(co) == "dead")
 
   -- error closing a coroutine
+  warn("@on")
   local x = 0
   co = coroutine.create(function()
-    local <toclose> y = func2close(function (self,err)
+    local y <close> = func2close(function (self,err)
       if (err ~= 111) then os.exit(false) end   -- should not happen
       x = 200
-      error(200)
+      error("200")
     end)
-    local <toclose> x = func2close(function (self, err)
+    local x <close> = func2close(function (self, err)
       assert(err == nil); error(111)
     end)
     coroutine.yield()
   end)
   coroutine.resume(co)
   assert(x == 0)
+  -- with test library, use 'store' mode to check warnings
+  warn(not T and "@off" or "@store")
   local st, msg = coroutine.close(co)
+  if not T then
+    warn("@on")
+  else   -- test library
+    assert(string.find(_WARN, "200")); _WARN = nil
+    warn("@normal")
+  end
   assert(st == false and coroutine.status(co) == "dead" and msg == 111)
   assert(x == 200)
 
@@ -356,7 +365,7 @@ do
 
   local X = false
   A = coroutine.wrap(function()
-    local <toclose> _ = setmetatable({}, {__close = function () X = true end})
+    local _ <close> = setmetatable({}, {__close = function () X = true end})
     return pcall(A, 1)
   end)
   st, res = A()
@@ -426,6 +435,10 @@ else
   while A==0 or B==0 do    -- A ~= 0 when 'x' finishes (similar for 'B','y')
     if A==0 then turn = "A"; assert(T.resume(x)) end
     if B==0 then turn = "B"; assert(T.resume(y)) end
+
+    -- check that traceback works correctly after yields inside hooks
+    debug.traceback(x)
+    debug.traceback(y)
   end
 
   assert(B // A == 7)    -- fact(7) // fact(6)
@@ -711,6 +724,17 @@ assert(run(function () return a / b end, {"div"}) == 10/12)
 assert(run(function () return a % b end, {"mod"}) == 10)
 assert(run(function () return a // b end, {"idiv"}) == 0)
 
+-- repeat tests with larger constants (to use 'K' opcodes)
+local a1000 = new(1000)
+
+assert(run(function () return a1000 + 1000 end, {"add"}) == 2000)
+assert(run(function () return a1000 - 25000 end, {"sub"}) == -24000)
+assert(run(function () return 2000 * a end, {"mul"}) == 20000)
+assert(run(function () return a1000 / 1000 end, {"div"}) == 1)
+assert(run(function () return a1000 % 600 end, {"mod"}) == 400)
+assert(run(function () return a1000 // 500 end, {"idiv"}) == 2)
+
+
 
 assert(run(function () return a % b end, {"mod"}) == 10)
 
@@ -723,6 +747,12 @@ assert(run(function () return a >> b end, {"shr"}) == 10 >> 12)
 assert(run(function () return 10 & b end, {"band"}) == 10 & 12)
 assert(run(function () return a | 2 end, {"bor"}) == 10 | 2)
 assert(run(function () return a ~ 2 end, {"bxor"}) == 10 ~ 2)
+assert(run(function () return a >> 2 end, {"shr"}) == 10 >> 2)
+assert(run(function () return 1 >> a end, {"shr"}) == 1 >> 10)
+assert(run(function () return a << 2 end, {"shl"}) == 10 << 2)
+assert(run(function () return 1 << a end, {"shl"}) == 1 << 10)
+assert(run(function () return 2 ~ a end, {"bxor"}) == 2 ~ 10)
+
 
 assert(run(function () return a..b end, {"concat"}) == "1012")
 
@@ -805,7 +835,7 @@ assert(run(function ()
 -- tests for coroutine API
 if T==nil then
   (Message or print)('\n >>> testC not active: skipping coroutine API tests <<<\n')
-  return
+  print "OK"; return
 end
 
 print('testing coroutine API')

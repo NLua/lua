@@ -255,6 +255,10 @@ do   -- test hook presence in debug info
 end
 
 
+-- hook table has weak keys
+assert(getmetatable(debug.getregistry()._HOOKKEY).__mode == 'k')
+
+
 a = {}; L = nil
 local glob = 1
 local oldglob = glob
@@ -347,12 +351,12 @@ assert(g(0,0) == 30)
  
 
 debug.sethook(nil);
-assert(debug.gethook() == nil)
+assert(not debug.gethook())
 
 
 -- minimal tests for setuservalue/getuservalue
 do
-  assert(debug.setuservalue(io.stdin, 10) == nil)
+  assert(not debug.setuservalue(io.stdin, 10))
   local a, b = debug.getuservalue(io.stdin, 10)
   assert(a == nil and not b)
 end
@@ -410,7 +414,7 @@ end, "c")
 a:f(1,2,3,4,5)
 assert(X.self == a and X.a == 1   and X.b == 2 and X.c == nil)
 assert(XX == 12)
-assert(debug.gethook() == nil)
+assert(not debug.gethook())
 
 
 -- testing access to local variables in return hook (bug in 5.2)
@@ -802,8 +806,7 @@ assert(a+3 == "add" and 3-a == "sub" and a*3 == "mul" and
        -a == "unm" and #a == "len" and a&3 == "band")
 assert(a + 30000 == "add" and a - 3.0 == "sub" and a * 3.0 == "mul" and
        -a == "unm" and #a == "len" and a & 3 == "band")
-assert(a|3 == "bor" and 3~a == "bxor" and a<<3 == "shift" and
-       a>>1 == "shift")
+assert(a|3 == "bor" and 3~a == "bxor" and a<<3 == "shl" and a>>1 == "shr")
 assert (a==b and a.op == "eq")
 assert (a>=b and a.op == "order")
 assert (a>b and a.op == "order")
