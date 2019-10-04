@@ -1,4 +1,4 @@
--- $Id: files.lua,v 1.95 2016/11/07 13:11:28 roberto Exp $
+-- $Id: testes/files.lua $
 -- See Copyright Notice in file all.lua
 
 local debug = require "debug"
@@ -27,6 +27,9 @@ end
 assert(not io.close(io.stdin) and
        not io.stdout:close() and
        not io.stderr:close())
+
+-- cannot call close method without an argument (new in 5.3.5)
+checkerr("got no value", io.stdin.close)
 
 
 assert(type(io.input()) == "userdata" and io.type(io.output()) == "file")
@@ -117,26 +120,75 @@ io.output(io.open(otherfile, "ab"))
 assert(io.write("\n\n\t\t  ", 3450, "\n"));
 io.close()
 
--- test writing/reading numbers
-f = assert(io.open(file, "w"))
-f:write(maxint, '\n')
-f:write(string.format("0X%x\n", maxint))
-f:write("0xABCp-3", '\n')
-f:write(0, '\n')
-f:write(-maxint, '\n')
-f:write(string.format("0x%X\n", -maxint))
-f:write("-0xABCp-3", '\n')
-assert(f:close())
-f = assert(io.open(file, "r"))
-assert(f:read("n") == maxint)
-assert(f:read("n") == maxint)
-assert(f:read("n") == 0xABCp-3)
-assert(f:read("n") == 0)
-assert(f:read("*n") == -maxint)            -- test old format (with '*')
-assert(f:read("n") == -maxint)
-assert(f:read("*n") == -0xABCp-3)            -- test old format (with '*')
-assert(f:close())
+
+do
+  -- closing file by scope
+  local F = nil
+  do
+    local f <close> = assert(io.open(file, "w"))
+    F = f
+  end
+  assert(tostring(F) == "file (closed)")
+end
 assert(os.remove(file))
+
+
+do
+  -- test writing/reading numbers
+  local f <close> = assert(io.open(file, "w"))
+  f:write(maxint, '\n')
+  f:write(string.format("0X%x\n", maxint))
+  f:write("0xABCp-3", '\n')
+  f:write(0, '\n')
+  f:write(-maxint, '\n')
+  f:write(string.format("0x%X\n", -maxint))
+  f:write("-0xABCp-3", '\n')
+  assert(f:close())
+  local f <close> = assert(io.open(file, "r"))
+  assert(f:read("n") == maxint)
+  assert(f:read("n") == maxint)
+  assert(f:read("n") == 0xABCp-3)
+  assert(f:read("n") == 0)
+  assert(f:read("*n") == -maxint)            -- test old format (with '*')
+  assert(f:read("n") == -maxint)
+  assert(f:read("*n") == -0xABCp-3)            -- test old format (with '*')
+end
+assert(os.remove(file))
+
+
+-- testing multiple arguments to io.read
+do
+  local f <close> = assert(io.open(file, "w"))
+  f:write[[
+a line
+another line
+1234
+3.45
+one
+two
+three
+]]
+  local l1, l2, l3, l4, n1, n2, c, dummy
+  assert(f:close())
+  local f <close> = assert(io.open(file, "r"))
+  l1, l2, n1, n2, dummy = f:read("l", "L", "n", "n")
+  assert(l1 == "a line" and l2 == "another line\n" and
+         n1 == 1234 and n2 == 3.45 and dummy == nil)
+  assert(f:close())
+  local f <close> = assert(io.open(file, "r"))
+  l1, l2, n1, n2, c, l3, l4, dummy = f:read(7, "l", "n", "n", 1, "l", "l")
+  assert(l1 == "a line\n" and l2 == "another line" and c == '\n' and
+         n1 == 1234 and n2 == 3.45 and l3 == "one" and l4 == "two"
+         and dummy == nil)
+  assert(f:close())
+  local f <close> = assert(io.open(file, "r"))
+  -- second item failing
+  l1, n1, n2, dummy = f:read("l", "n", "n", "l")
+  assert(l1 == "a line" and not n1)
+end
+assert(os.remove(file))
+
+
 
 -- test yielding during 'dofile'
 f = assert(io.open(file, "w"))
@@ -148,7 +200,7 @@ return x + y * z
 assert(f:close())
 f = coroutine.wrap(dofile)
 assert(f(file) == 10)
-print(f(100, 101) == 20)
+assert(f(100, 101) == 20)
 assert(f(200) == 100 + 200 * 101)
 assert(os.remove(file))
 
@@ -176,7 +228,7 @@ assert(f:read("n") == 0Xdeadbeefdeadbeef); assert(f:read(2) == "x\n")
 assert(f:read("n") == 0x1.13aP3); assert(f:read(1) == "e")
 
 do   -- attempt to read too long number
-  assert(f:read("n") == nil)  -- fails
+  assert(not f:read("n"))  -- fails
   local s = f:read("L")   -- read rest of line
   assert(string.find(s, "^00*\n$"))  -- lots of 0's left
 end
@@ -262,14 +314,14 @@ assert(io.read() == "fourth_line")
 assert(io.read() == "")  -- empty line
 assert(io.read('n') == 3450)
 assert(io.read(1) == '\n')
-assert(io.read(0) == nil)  -- end of file
-assert(io.read(1) == nil)  -- end of file
-assert(io.read(30000) == nil)  -- end of file
-assert(({io.read(1)})[2] == nil)
-assert(io.read() == nil)  -- end of file
-assert(({io.read()})[2] == nil)
-assert(io.read('n') == nil)  -- end of file
-assert(({io.read('n')})[2] == nil)
+assert(not io.read(0))  -- end of file
+assert(not io.read(1))  -- end of file
+assert(not io.read(30000))  -- end of file
+assert(({io.read(1)})[2] == undef)
+assert(not io.read())  -- end of file
+assert(({io.read()})[2] == undef)
+assert(not io.read('n'))  -- end of file
+assert(({io.read('n')})[2] == undef)
 assert(io.read('a') == '')  -- end of file (OK for 'a')
 assert(io.read('a') == '')  -- end of file (OK for 'a')
 collectgarbage()
@@ -304,7 +356,7 @@ assert(io.read(string.len(t)) == t)
 assert(io.read(1) == ' ')
 assert(io.read(0))
 assert(io.read('a') == ';end of file\n')
-assert(io.read(0) == nil)
+assert(not io.read(0))
 assert(io.close(io.input()))
 
 
@@ -312,7 +364,7 @@ assert(io.close(io.input()))
 do
   local function ismsg (m)
     -- error message is not a code number
-    return (type(m) == "string" and tonumber(m) == nil)
+    return (type(m) == "string" and not tonumber(m))
   end
 
   -- read
@@ -341,7 +393,7 @@ assert(io.read"L" == "\n")
 assert(io.read"L" == "\n")
 assert(io.read"L" == "line\n")
 assert(io.read"L" == "other")
-assert(io.read"L" == nil)
+assert(not io.read"L")
 io.input():close()
 
 local f = assert(io.open(file))
@@ -366,14 +418,51 @@ assert(s == "lineother")
 
 io.output(file); io.write"a = 10 + 34\na = 2*a\na = -a\n":close()
 local t = {}
-load(io.lines(file, "L"), nil, nil, t)()
+assert(load(io.lines(file, "L"), nil, nil, t))()
 assert(t.a == -((10 + 34) * 2))
+
+
+do   -- testing closing file in line iteration
+
+  -- get the to-be-closed variable from a loop
+  local function gettoclose (lv)
+    lv = lv + 1
+    local stvar = 0   -- to-be-closed is 4th state variable in the loop
+    for i = 1, 1000 do
+      local n, v = debug.getlocal(lv, i)
+      if n == "(for state)" then
+        stvar = stvar + 1
+        if stvar == 4 then return v end
+      end
+    end
+  end
+
+  local f
+  for l in io.lines(file) do
+    f = gettoclose(1)
+    assert(io.type(f) == "file")
+    break
+  end
+  assert(io.type(f) == "closed file")
+
+  f = nil
+  local function foo (name)
+    for l in io.lines(name) do
+      f = gettoclose(1)
+      assert(io.type(f) == "file")
+      error(f)   -- exit loop with an error
+    end
+  end
+  local st, msg = pcall(foo, file)
+  assert(st == false and io.type(msg) == "closed file")
+
+end
 
 
 -- test for multipe arguments in 'lines'
 io.output(file); io.write"0123456789\n":close()
 for a,b in io.lines(file, 1, 1) do
-  if a == "\n" then assert(b == nil)
+  if a == "\n" then assert(not b)
   else assert(tonumber(a) == tonumber(b) - 1)
   end
 end
@@ -384,13 +473,13 @@ end
 
 for a,b,c in io.lines(file, "a", 0, 1) do
   if a == "" then break end
-  assert(a == "0123456789\n" and b == nil and c == nil)
+  assert(a == "0123456789\n" and not b and not c)
 end
 collectgarbage()   -- to close file in previous iteration
 
 io.output(file); io.write"00\n10\n20\n30\n40\n":close()
 for a, b in io.lines(file, "n", "n") do
-  if a == 40 then assert(b == nil)
+  if a == 40 then assert(not b)
   else assert(a == b - 10)
   end
 end
@@ -410,13 +499,13 @@ X
 -                                   y;
 ]]:close()
 _G.X = 1
-assert(not load(io.lines(file)))
+assert(not load((io.lines(file))))
 collectgarbage()   -- to close file in previous iteration
-load(io.lines(file, "L"))()
+load((io.lines(file, "L")))()
 assert(_G.X == 2)
-load(io.lines(file, 1))()
+load((io.lines(file, 1)))()
 assert(_G.X == 4)
-load(io.lines(file, 3))()
+load((io.lines(file, 3)))()
 assert(_G.X == 8)
 
 print('+')
@@ -565,7 +654,7 @@ and the rest of the file
 io.input(file)
 local _,a,b,c,d,e,h,__ = io.read(1, 'n', 'n', 'l', 'l', 'l', 'a', 10)
 assert(io.close(io.input()))
-assert(_ == ' ' and __ == nil)
+assert(_ == ' ' and not __)
 assert(type(a) == 'number' and a==123.4 and b==-56e-2)
 assert(d=='second line' and e=='third line')
 assert(h==[[
@@ -617,7 +706,7 @@ if not _soft then
   io.input():seek('set', 0)
   y = io.read()  -- huge line
   assert(x == y..'\n'..io.read())
-  assert(io.read() == nil)
+  assert(not io.read())
   io.close(io.input())
   assert(os.remove(file))
   x = nil; y = nil
@@ -626,7 +715,7 @@ end
 if not _port then
   local progname
   do  -- get name of running executable
-    local arg = arg or _ARG
+    local arg = arg or ARG
     local i = 0
     while arg[i] do i = i - 1 end
     progname = '"' .. arg[i + 1] .. '"'
@@ -686,11 +775,24 @@ assert(os.date(string.rep("%d", 1000), t) ==
        string.rep(os.date("%d", t), 1000))
 assert(os.date(string.rep("%", 200)) == string.rep("%", 100))
 
-local t = os.time()
-D = os.date("*t", t)
-load(os.date([[assert(D.year==%Y and D.month==%m and D.day==%d and
-  D.hour==%H and D.min==%M and D.sec==%S and
-  D.wday==%w+1 and D.yday==%j and type(D.isdst) == 'boolean')]], t))()
+local function checkDateTable (t)
+  _G.D = os.date("*t", t)
+  assert(os.time(D) == t)
+  load(os.date([[assert(D.year==%Y and D.month==%m and D.day==%d and
+    D.hour==%H and D.min==%M and D.sec==%S and
+    D.wday==%w+1 and D.yday==%j)]], t))()
+  _G.D = nil
+end
+
+checkDateTable(os.time())
+if not _port then
+  -- assume that time_t can represent these values
+  checkDateTable(0)
+  checkDateTable(1)
+  checkDateTable(1000)
+  checkDateTable(0x7fffffff)
+  checkDateTable(0x80000000)
+end
 
 checkerr("invalid conversion specifier", os.date, "%")
 checkerr("invalid conversion specifier", os.date, "%9")
@@ -704,11 +806,24 @@ checkerr("not an integer", os.time, {year=1000, month=1, day=1, hour=1.5})
 
 checkerr("missing", os.time, {hour = 12})   -- missing date
 
+
+if string.packsize("i") == 4 then   -- 4-byte ints
+  checkerr("field 'year' is out-of-bound", os.time,
+              {year = -(1 << 31) + 1899, month = 1, day = 1})
+end
+
 if not _port then
   -- test Posix-specific modifiers
   assert(type(os.date("%Ex")) == 'string')
   assert(type(os.date("%Oy")) == 'string')
 
+  -- test large dates (assume at least 4-byte ints and time_t)
+  local t0 = os.time{year = 1970, month = 1, day = 0}
+  local t1 = os.time{year = 1970, month = 1, day = 0, sec = (1 << 31) - 1}
+  assert(t1 - t0 == (1 << 31) - 1)
+  t0 = os.time{year = 1970, month = 1, day = 1}
+  t1 = os.time{year = 1970, month = 1, day = 1, sec = -(1 << 31)}
+  assert(t1 - t0 == -(1 << 31))
 
   -- test out-of-range dates (at least for Unix)
   if maxint >= 2^62 then  -- cannot do these tests in Small Lua
@@ -723,34 +838,51 @@ if not _port then
         -- time_t has 8 bytes; an int year cannot represent a huge time
         print("  8-byte time_t")
         checkerr("cannot be represented", os.date, "%Y", 2^60)
-        -- it should have no problems with year 4000
-        assert(tonumber(os.time{year=4000, month=1, day=1}))
+
+        -- this is the maximum year
+        assert(tonumber(os.time
+          {year=(1 << 31) + 1899, month=12, day=31, hour=23, min=59, sec=59}))
+
+        -- this is too much
+        checkerr("represented", os.time,
+          {year=(1 << 31) + 1899, month=12, day=31, hour=23, min=59, sec=60})
       end
+
+      -- internal 'int' fields cannot hold these values
+      checkerr("field 'day' is out-of-bound", os.time,
+                  {year = 0, month = 1, day = 2^32})
+
+      checkerr("field 'month' is out-of-bound", os.time,
+                  {year = 0, month = -((1 << 31) + 1), day = 1})
+
+      checkerr("field 'year' is out-of-bound", os.time,
+                  {year = (1 << 31) + 1900, month = 1, day = 1})
+
     else    -- 8-byte ints
       -- assume time_t has 8 bytes too
       print("  8-byte time_t")
       assert(tonumber(os.date("%Y", 2^60)))
+
       -- but still cannot represent a huge year
       checkerr("cannot be represented", os.time, {year=2^60, month=1, day=1})
     end
   end
 end
 
-
-D = os.date("!*t", t)
-load(os.date([[!assert(D.year==%Y and D.month==%m and D.day==%d and
-  D.hour==%H and D.min==%M and D.sec==%S and
-  D.wday==%w+1 and D.yday==%j and type(D.isdst) == 'boolean')]], t))()
-
 do
   local D = os.date("*t")
   local t = os.time(D)
-  assert(type(D.isdst) == 'boolean')
+  if D.isdst == nil then
+    print("no daylight saving information")
+  else
+    assert(type(D.isdst) == 'boolean')
+  end
   D.isdst = nil
   local t1 = os.time(D)
   assert(t == t1)   -- if isdst is absent uses correct default
 end
 
+local D = os.date("*t")
 t = os.time(D)
 D.year = D.year-1;
 local t1 = os.time(D)

@@ -1,9 +1,10 @@
--- $Id: strings.lua,v 1.87 2016/12/21 19:23:02 roberto Exp $
+-- $Id: testes/strings.lua $
 -- See Copyright Notice in file all.lua
 
 print('testing strings and string library')
 
-local maxi, mini = math.maxinteger, math.mininteger
+local maxi <const> = math.maxinteger
+local mini <const> = math.mininteger
 
 
 local function checkerror (msg, f, ...)
@@ -55,13 +56,13 @@ a,b = string.find("123456789", "345")
 assert(string.sub("123456789", a, b) == "345")
 assert(string.find("1234567890123456789", "345", 3) == 3)
 assert(string.find("1234567890123456789", "345", 4) == 13)
-assert(string.find("1234567890123456789", "346", 4) == nil)
+assert(not string.find("1234567890123456789", "346", 4))
 assert(string.find("1234567890123456789", ".45", -9) == 13)
-assert(string.find("abcdefg", "\0", 5, 1) == nil)
+assert(not string.find("abcdefg", "\0", 5, 1))
 assert(string.find("", "") == 1)
 assert(string.find("", "", 1) == 1)
 assert(not string.find("", "", 2))
-assert(string.find('', 'aaa', 1) == nil)
+assert(not string.find('', 'aaa', 1))
 assert(('alo(.)alo'):find('(.)', 1, 1) == 4)
 
 assert(string.len("") == 0)
@@ -93,6 +94,11 @@ assert(string.char(0, string.byte("\xe4"), 0) == "\0\xe4\0")
 assert(string.char(string.byte("\xe4l\0óu", 1, -1)) == "\xe4l\0óu")
 assert(string.char(string.byte("\xe4l\0óu", 1, 0)) == "")
 assert(string.char(string.byte("\xe4l\0óu", -10, 100)) == "\xe4l\0óu")
+
+checkerror("out of range", string.char, 256)
+checkerror("out of range", string.char, -1)
+checkerror("out of range", string.char, math.maxinteger)
+checkerror("out of range", string.char, math.mininteger)
 
 assert(string.upper("ab\0c") == "AB\0C")
 assert(string.lower("\0ABCc%$") == "\0abcc%$")
@@ -148,6 +154,30 @@ else   -- compatible coercion
   assert(tostring(-1203 + 0.0) == "-1203")
 end
 
+do  -- tests for '%p' format
+  -- not much to test, as C does not specify what '%p' does.
+  -- ("The value of the pointer is converted to a sequence of printing
+  -- characters, in an implementation-defined manner.")
+  local null = string.format("%p", nil)
+  assert(string.format("%p", {}) ~= null)
+  assert(string.format("%p", 4) == null)
+  assert(string.format("%p", print) ~= null)
+  assert(string.format("%p", coroutine.running()) ~= null)
+  do
+    local t1 = {}; local t2 = {}
+    assert(string.format("%p", t1) ~= string.format("%p", t2))
+  end
+  do     -- short strings
+    local s1 = string.rep("a", 10)
+    local s2 = string.rep("a", 10)
+  assert(string.format("%p", s1) == string.format("%p", s2))
+  end
+  do     -- long strings
+    local s1 = string.rep("a", 300); local s2 = string.rep("a", 300)
+    assert(string.format("%p", s1) ~= string.format("%p", s2))
+  end
+  assert(#string.format("%90p", {}) == 90)
+end
 
 x = '"ílo"\n\\'
 assert(string.format('%q%s', x, x) == '"\\"ílo\\"\\\n\\\\""ílo"\n\\')
@@ -186,11 +216,15 @@ do
   checkQ(true)
   checkQ(nil)
   checkQ(false)
+  checkQ(math.huge)
+  checkQ(-math.huge)
+  assert(string.format("%q", 0/0) == "(0/0)")   -- NaN
   checkerror("no literal", string.format, "%q", {})
 end
 
 assert(string.format("\0%s\0", "\0\0\1") == "\0\0\0\1\0")
 checkerror("contains zeros", string.format, "%10s", "\0")
+checkerror("cannot have modifiers", string.format, "%10q", "1")
 
 -- format x tostring
 assert(string.format("%s %s", nil, true) == "nil true")
@@ -224,6 +258,12 @@ do    -- longest number that can be formatted
   local s = string.format('%.99f', -(10^i))
   assert(string.len(s) >= i + 101)
   assert(tonumber(s) == -(10^i))
+
+  -- limit for floats
+  assert(10^38 < math.huge)
+  local s = string.format('%.99f', -(10^38))
+  assert(string.len(s) >= 38 + 101)
+  assert(tonumber(s) == -(10^38))
 end
 
 
@@ -299,7 +339,7 @@ check("%100.3d", "too long")
 check("%1"..aux..".3d", "too long")
 check("%1.100d", "too long")
 check("%10.1"..aux.."004d", "too long")
-check("%t", "invalid option")
+check("%t", "invalid conversion")
 check("%"..aux.."d", "repeated flags")
 check("%d %d", "no value")
 
@@ -374,6 +414,69 @@ do
   co = coroutine.wrap(f)
   assert(co() == "2")
 end
+
+
+if T==nil then
+  (Message or print)
+     ("\n >>> testC not active: skipping 'pushfstring' tests <<<\n")
+else
+
+  print"testing 'pushfstring'"
+
+  -- formats %U, %f, %I already tested elsewhere
+
+  local blen = 400    -- internal buffer length in 'luaO_pushfstring'
+
+  local function callpfs (op, fmt, n)
+    local x = {T.testC("pushfstring" .. op .. "; return *", fmt, n)}
+    -- stack has code, 'fmt', 'n', and result from operation
+    assert(#x == 4)  -- make sure nothing else was left in the stack
+    return x[4]
+  end
+
+  local function testpfs (op, fmt, n)
+    assert(callpfs(op, fmt, n) == string.format(fmt, n))
+  end
+
+  testpfs("I", "", 0)
+  testpfs("I", string.rep("a", blen - 1), 0)
+  testpfs("I", string.rep("a", blen), 0)
+  testpfs("I", string.rep("a", blen + 1), 0)
+
+  local str = string.rep("ab", blen) .. "%d" .. string.rep("d", blen / 2)
+  testpfs("I", str, 2^14)
+  testpfs("I", str, -2^15)
+
+  str = "%d" .. string.rep("cd", blen)
+  testpfs("I", str, 2^14)
+  testpfs("I", str, -2^15)
+
+  str = string.rep("c", blen - 2) .. "%d"
+  testpfs("I", str, 2^14)
+  testpfs("I", str, -2^15)
+
+  for l = 12, 14 do
+    local str1 = string.rep("a", l)
+    for i = 0, 500, 13 do
+      for j = 0, 500, 13 do
+        str = string.rep("a", i) .. "%s" .. string.rep("d", j)
+        testpfs("S", str, str1)
+        testpfs("S", str, str)
+      end
+    end
+  end
+
+  str = "abc %c def"
+  testpfs("I", str, string.byte("A"))
+  testpfs("I", str, 255)
+
+  str = string.rep("a", blen - 1) .. "%p" .. string.rep("cd", blen)
+  testpfs("P", str, {})
+
+  str = string.rep("%%", 3 * blen) .. "%p" .. string.rep("%%", 2 * blen)
+  testpfs("P", str, {})
+end
+
 
 print('OK')
 
