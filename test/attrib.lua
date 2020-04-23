@@ -28,7 +28,7 @@ do
   local path = table.concat(t, ";")
   -- use that path in a search
   local s, err = package.searchpath("xuxu", path)
-  -- search fails; check that message has an occurence of
+  -- search fails; check that message has an occurrence of
   -- '??????????' with ? replaced by xuxu and at least 'max' lines
   assert(not s and
          string.find(err, string.rep("xuxu", 10)) and
@@ -45,6 +45,29 @@ do
   local s, err = pcall(require, "no-such-file")
   assert(not s and string.find(err, "package.path"))
   package.path = oldpath
+end
+
+
+do  print"testing 'require' message"
+  local oldpath = package.path
+  local oldcpath = package.cpath
+
+  package.path = "?.lua;?/?"
+  package.cpath = "?.so;?/init"
+
+  local st, msg = pcall(require, 'XXX')
+
+  local expected = [[module 'XXX' not found:
+	no field package.preload['XXX']
+	no file 'XXX.lua'
+	no file 'XXX/XXX'
+	no file 'XXX.so'
+	no file 'XXX/init']]
+
+  assert(msg == expected)
+
+  package.path = oldpath
+  package.cpath = oldcpath
 end
 
 print('+')

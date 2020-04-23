@@ -158,25 +158,38 @@ do  -- tests for '%p' format
   -- not much to test, as C does not specify what '%p' does.
   -- ("The value of the pointer is converted to a sequence of printing
   -- characters, in an implementation-defined manner.")
-  local null = string.format("%p", nil)
-  assert(string.format("%p", {}) ~= null)
+  local null = "(null)"    -- nulls are formatted by Lua
   assert(string.format("%p", 4) == null)
+  assert(string.format("%p", true) == null)
+  assert(string.format("%p", nil) == null)
+  assert(string.format("%p", {}) ~= null)
   assert(string.format("%p", print) ~= null)
   assert(string.format("%p", coroutine.running()) ~= null)
+  assert(string.format("%p", io.stdin) ~= null)
+  assert(string.format("%p", io.stdin) == string.format("%p", io.stdin))
+  assert(string.format("%p", print) == string.format("%p", print))
+  assert(string.format("%p", print) ~= string.format("%p", assert))
+
+  assert(#string.format("%90p", {}) == 90)
+  assert(#string.format("%-60p", {}) == 60)
+  assert(string.format("%10p", false) == string.rep(" ", 10 - #null) .. null)
+  assert(string.format("%-12p", 1.5) == null .. string.rep(" ", 12 - #null))
+
   do
     local t1 = {}; local t2 = {}
     assert(string.format("%p", t1) ~= string.format("%p", t2))
   end
-  do     -- short strings
+
+  do     -- short strings are internalized
     local s1 = string.rep("a", 10)
-    local s2 = string.rep("a", 10)
+    local s2 = string.rep("aa", 5)
   assert(string.format("%p", s1) == string.format("%p", s2))
   end
-  do     -- long strings
+
+  do     -- long strings aren't internalized
     local s1 = string.rep("a", 300); local s2 = string.rep("a", 300)
     assert(string.format("%p", s1) ~= string.format("%p", s2))
   end
-  assert(#string.format("%90p", {}) == 90)
 end
 
 x = '"ílo"\n\\'
@@ -309,8 +322,8 @@ do print("testing 'format %a %A'")
     matchhexa(n)
   end
 
-  assert(string.find(string.format("%A", 0.0), "^0X0%.?0?P%+?0$"))
-  assert(string.find(string.format("%a", -0.0), "^%-0x0%.?0?p%+?0$"))
+  assert(string.find(string.format("%A", 0.0), "^0X0%.?0*P%+?0$"))
+  assert(string.find(string.format("%a", -0.0), "^%-0x0%.?0*p%+?0$"))
 
   if not _port then   -- test inf, -inf, NaN, and -0.0
     assert(string.find(string.format("%a", 1/0), "^inf"))

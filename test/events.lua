@@ -182,7 +182,7 @@ assert(~a == a); checkcap{"bnot", a, a}
 assert(a << 3 == a); checkcap{"shl", a, 3}
 assert(1.5 >> a == 1.5); checkcap{"shr", 1.5, a}
 
--- for comparsion operators, all results are true
+-- for comparison operators, all results are true
 assert(5.0 > a); checkcap{"lt", a, 5.0}
 assert(a >= 10); checkcap{"le", 10, a}
 assert(a <= -10.0); checkcap{"le", a, -10.0}
@@ -325,6 +325,7 @@ else
   assert(u1 == u3 and u3 == u1 and u1 ~= u2)
   assert(u2 == u1 and u2 == u3 and u3 == u2)
   assert(u2 ~= {})   -- different types cannot be equal
+  assert(rawequal(u1, u1) and not rawequal(u1, u3))
 
   local mirror = {}
   debug.setmetatable(u3, {__index = mirror, __newindex = mirror})
