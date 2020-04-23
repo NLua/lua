@@ -1404,6 +1404,8 @@ LUA_API void lua_upvaluejoin (lua_State *L, int fidx1, int n1,
   LClosure *f1;
   UpVal **up1 = getupvalref(L, fidx1, n1, &f1);
   UpVal **up2 = getupvalref(L, fidx2, n2, NULL);
+  if (*up1 == *up2)
+    return;
   *up1 = *up2;
   luaC_objbarrier(L, f1, *up1);
 }
