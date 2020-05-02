@@ -33,7 +33,7 @@ BEGIN
             VALUE "CompanyName", "Lua.org"
             VALUE "FileDescription", "Lua Language Run Time"
             VALUE "FileVersion", "5.4.0"
-            VALUE "LegalCopyright", "Copyright © 1994-2019 Lua.org, PUC-Rio."
+            VALUE "LegalCopyright", "Copyright © 1994-2020 Lua.org, PUC-Rio."
             VALUE "OriginalFilename", "lua54.dll"
             VALUE "PrivateBuild", "Built for NLua"
             VALUE "ProductName", "Lua - The Programming Language"

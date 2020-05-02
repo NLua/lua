@@ -12,7 +12,7 @@ BEGIN
             VALUE "CompanyName", "Lua.org\0"
             VALUE "FileDescription", "Lua Standalone Compiler\0"
             VALUE "FileVersion", "5.4.0\0"
-            VALUE "LegalCopyright", "Copyright © 1994-2019 Lua.org, PUC-Rio.\0"
+            VALUE "LegalCopyright", "Copyright © 1994-2020 Lua.org, PUC-Rio.\0"
             VALUE "OriginalFilename", "luac.exe\0"
             VALUE "ProductName", "Lua - The Programming Language\0"
             VALUE "ProductVersion", "5.4.0\0"
