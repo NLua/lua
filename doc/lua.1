@@ -1,5 +1,5 @@
-.\" $Id: lua.man,v 1.14 2019/11/13 13:20:50 lhf Exp $
-.TH LUA 1 "$Date: 2019/11/13 13:20:50 $"
+.\" $Id: lua.man,v 1.14 2020/05/21 19:31:21 lhf Exp $
+.TH LUA 1 "$Date: 2020/05/21 19:31:21 $"
 .SH NAME
 lua \- Lua interpreter
 .SH SYNOPSIS
@@ -65,12 +65,12 @@ checks the contents of the environment variables
 and
 .BR LUA_INIT ,
 in that order.
-If the contents is of the form
+If the contents are of the form
 .RI '@ filename ',
 then
 .I filename
 is executed.
-Otherwise, the contents is assumed to be a Lua statement and is executed.
+Otherwise, the contents are assumed to be a Lua statement and is executed.
 When
 .B LUA_INIT_5_4
 is defined,
@@ -131,9 +131,9 @@ exits with the given exit status.
 Otherwise,
 .B lua
 exits
-with EXIT_SUCCESS (0 in POSIX systems) if there were no errors
+with EXIT_SUCCESS (0 on POSIX systems) if there were no errors
 and
-with EXIT_FAILURE (1 in POSIX systems) if there were errors.
+with EXIT_FAILURE (1 on POSIX systems) if there were errors.
 Errors raised in interactive mode do not cause exits.
 .SH DIAGNOSTICS
 Error messages should be self explanatory.

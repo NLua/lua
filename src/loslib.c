@@ -10,6 +10,7 @@
 #include "lprefix.h"
 
 
+#include <errno.h>
 #include <locale.h>
 #include <stdlib.h>
 #include <string.h>
@@ -145,7 +146,9 @@
 
 static int os_execute (lua_State *L) {
   const char *cmd = luaL_optstring(L, 1, NULL);
-  int stat = lua_system(cmd);
+  int stat;
+  errno = 0;
+  stat = lua_system(cmd);
   if (cmd != NULL)
     return luaL_execresult(L, stat);
   else {
