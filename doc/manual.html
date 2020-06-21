@@ -11718,6 +11718,17 @@ of the function <a href="#pdf-collectgarbage"><code>collectgarbage</code></a> ar
 You should use the new option "<code>incremental</code>" to set them.
 </li>
 
+<li>
+The function <a href="#pdf-io.lines"><code>io.lines</code></a> now returns four values,
+instead of just one.
+That can be a problem when it is used as the sole
+argument to another function that has optional parameters,
+such as in <code>load(io.lines(filename, "L"))</code>.
+To fix that issue,
+you can wrap the call into parentheses,
+to adjust its number of results to one.
+</li>
+
 </ul>
 
 
@@ -11875,7 +11886,7 @@ and LiteralString, see <a href="#3.1">&sect;3.1</a>.)
 
 <P CLASS="footer">
 Last update:
-Wed Jun 10 21:15:17 UTC 2020
+Thu Jun 18 16:10:16 UTC 2020
 </P>
 <!--
 Last change: revised for Lua 5.4.0 (final)
