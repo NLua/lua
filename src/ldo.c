@@ -466,13 +466,13 @@ void luaD_call (lua_State *L, StkId func, int nresults) {
       f = fvalue(s2v(func));
      Cfunc: {
       int n;  /* number of returns */
-      CallInfo *ci = next_ci(L);
+      CallInfo *ci;
       checkstackp(L, LUA_MINSTACK, func);  /* ensure minimum stack size */
+      L->ci = ci = next_ci(L);
       ci->nresults = nresults;
       ci->callstatus = CIST_C;
       ci->top = L->top + LUA_MINSTACK;
       ci->func = func;
-      L->ci = ci;
       lua_assert(ci->top <= L->stack_last);
       if (L->hookmask & LUA_MASKCALL) {
         int narg = cast_int(L->top - func) - 1;
@@ -486,18 +486,18 @@ void luaD_call (lua_State *L, StkId func, int nresults) {
       break;
     }
     case LUA_VLCL: {  /* Lua function */
-      CallInfo *ci = next_ci(L);
+      CallInfo *ci;
       Proto *p = clLvalue(s2v(func))->p;
       int narg = cast_int(L->top - func) - 1;  /* number of real arguments */
       int nfixparams = p->numparams;
       int fsize = p->maxstacksize;  /* frame size */
       checkstackp(L, fsize, func);
+      L->ci = ci = next_ci(L);
       ci->nresults = nresults;
       ci->u.l.savedpc = p->code;  /* starting point */
       ci->callstatus = 0;
       ci->top = func + 1 + fsize;
       ci->func = func;
-      L->ci = ci;
       for (; narg < nfixparams; narg++)
         setnilvalue(s2v(L->top++));  /* complete missing arguments */
       lua_assert(ci->top <= L->stack_last);
@@ -674,7 +674,7 @@ LUA_API int lua_resume (lua_State *L, lua_State *from, int nargs,
   if (from == NULL)
     L->nCcalls = CSTACKTHREAD;
   else  /* correct 'nCcalls' for this thread */
-    L->nCcalls = getCcalls(from) + from->nci - L->nci - CSTACKCF;
+    L->nCcalls = getCcalls(from) - L->nci - CSTACKCF;
   if (L->nCcalls <= CSTACKERR)
     return resume_error(L, "C stack overflow", nargs);
   luai_userstateresume(L, nargs);

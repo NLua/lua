@@ -205,8 +205,9 @@ static void loadUpvalues (LoadState *S, Proto *f) {
   n = loadInt(S);
   f->upvalues = luaM_newvectorchecked(S->L, n, Upvaldesc);
   f->sizeupvalues = n;
-  for (i = 0; i < n; i++) {
+  for (i = 0; i < n; i++)
     f->upvalues[i].name = NULL;
+  for (i = 0; i < n; i++) {
     f->upvalues[i].instack = loadByte(S);
     f->upvalues[i].idx = loadByte(S);
     f->upvalues[i].kind = loadByte(S);

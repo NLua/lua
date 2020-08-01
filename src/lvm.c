@@ -1104,7 +1104,7 @@ void luaV_finishOp (lua_State *L) {
 
 
 #define checkGC(L,c)  \
-	{ luaC_condGC(L, L->top = (c),  /* limit of live values */ \
+	{ luaC_condGC(L, (savepc(L), L->top = (c)), \
                          updatetrap(ci)); \
            luai_threadyield(L); }
 
@@ -1792,8 +1792,7 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
         vmbreak;
       }
       vmcase(OP_VARARGPREP) {
-        luaT_adjustvarargs(L, GETARG_A(i), ci, cl->p);
-        updatetrap(ci);
+        ProtectNT(luaT_adjustvarargs(L, GETARG_A(i), ci, cl->p));
         if (trap) {
           luaD_hookcall(L, ci);
           L->oldpc = pc + 1;  /* next opcode will be seen as a "new" line */

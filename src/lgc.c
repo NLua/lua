@@ -856,6 +856,8 @@ static void GCTM (lua_State *L) {
     if (unlikely(status != LUA_OK)) {  /* error while running __gc? */
       luaE_warnerror(L, "__gc metamethod");
       L->top--;  /* pops error object */
+      if (isLua(L->ci))
+        L->oldpc = L->ci->u.l.savedpc;  /* update 'oldpc' */
     }
   }
 }
@@ -1140,7 +1142,7 @@ static void finishgencycle (lua_State *L, global_State *g) {
 static void youngcollection (lua_State *L, global_State *g) {
   GCObject **psurvival;  /* to point to first non-dead survival object */
   lua_assert(g->gcstate == GCSpropagate);
-  markold(g, g->survival, g->reallyold);
+  markold(g, g->allgc, g->reallyold);
   markold(g, g->finobj, g->finobjrold);
   atomic(L);
 

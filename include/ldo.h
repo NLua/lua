@@ -44,7 +44,7 @@
 
 /* macro to check stack size and GC */
 #define checkstackGC(L,fsize)  \
-	luaD_checkstackaux(L, (fsize), (void)0, luaC_checkGC(L))
+	luaD_checkstackaux(L, (fsize), luaC_checkGC(L), (void)0)
 
 
 /* type of protected functions, to be ran by 'runprotected' */
