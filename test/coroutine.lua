@@ -123,7 +123,7 @@ assert(#a == 22 and a[#a] == 79)
 x, a = nil
 
 
--- coroutine closing
+print("to-be-closed variables in coroutines")
 
 local function func2close (f)
   return setmetatable({}, {__close = f})
@@ -134,7 +134,8 @@ do
   local co = coroutine.create(print)
   assert(coroutine.resume(co, "testing 'coroutine.close'"))
   assert(coroutine.status(co) == "dead")
-  assert(coroutine.close(co))
+  local st, msg = coroutine.close(co)
+  assert(st and msg == nil)
 
   -- cannot close the running coroutine
   local st, msg = pcall(coroutine.close, coroutine.running())
@@ -151,6 +152,13 @@ do
   -- to-be-closed variables in coroutines
   local X
 
+  -- closing a coroutine after an error
+  local co = coroutine.create(error)
+  local st, msg = coroutine.resume(co, 100)
+  assert(not st and msg == 100)
+  st, msg = coroutine.close(co)
+  assert(not st and msg == 100)
+
   co = coroutine.create(function ()
     local x <close> = func2close(function (self, err)
       assert(err == nil); X = false
@@ -164,13 +172,12 @@ do
   assert(not X and coroutine.status(co) == "dead")
 
   -- error closing a coroutine
-  warn("@on")
   local x = 0
   co = coroutine.create(function()
     local y <close> = func2close(function (self,err)
-      if (err ~= 111) then os.exit(false) end   -- should not happen
+      assert(err == 111)
       x = 200
-      error("200")
+      error(200)
     end)
     local x <close> = func2close(function (self, err)
       assert(err == nil); error(111)
@@ -179,18 +186,9 @@ do
   end)
   coroutine.resume(co)
   assert(x == 0)
-  -- with test library, use 'store' mode to check warnings
-  warn(not T and "@off" or "@store")
   local st, msg = coroutine.close(co)
-  if not T then
-    warn("@on")
-  else   -- test library
-    assert(string.find(_WARN, "200")); _WARN = false
-    warn("@normal")
-  end
-  assert(st == false and coroutine.status(co) == "dead" and msg == 111)
+  assert(st == false and coroutine.status(co) == "dead" and msg == 200)
   assert(x == 200)
-
 end
 
 do
@@ -208,6 +206,44 @@ do
   local st1, st2, err = coroutine.resume(co)
   assert(st1 and not st2 and err == 43)
   assert(X == 43 and Y.name == "pcall")
+
+  -- recovering from errors in __close metamethods
+  local track = {}
+
+  local function h (o)
+    local hv <close> = o
+    return 1
+  end
+
+  local function foo ()
+    local x <close> = func2close(function(_,msg)
+      track[#track + 1] = msg or false
+      error(20)
+    end)
+    local y <close> = func2close(function(_,msg)
+      track[#track + 1] = msg or false
+      return 1000
+    end)
+    local z <close> = func2close(function(_,msg)
+      track[#track + 1] = msg or false
+      error(10)
+    end)
+    coroutine.yield(1)
+    h(func2close(function(_,msg)
+        track[#track + 1] = msg or false
+        error(2)
+      end))
+  end
+
+  local co = coroutine.create(pcall)
+
+  local st, res = coroutine.resume(co, foo)    -- call 'foo' protected
+  assert(st and res == 1)   -- yield 1
+  local st, res1, res2 = coroutine.resume(co)   -- continue
+  assert(coroutine.status(co) == "dead")
+  assert(st and not res1 and res2 == 20)   -- last error (20)
+  assert(track[1] == false and track[2] == 2 and track[3] == 10 and
+         track[4] == 10)
 end
 
 
@@ -461,6 +497,28 @@ else
   end
 
   assert(B // A == 7)    -- fact(7) // fact(6)
+
+  do   -- hooks vs. multiple values
+    local done
+    local function test (n)
+      done = false
+      return coroutine.wrap(function ()
+        local a = {}
+        for i = 1, n do a[i] = i end
+        -- 'pushint' just to perturb the stack
+        T.sethook("pushint 10; yield 0", "", 1)   -- yield at each op.
+        local a1 = {table.unpack(a)}   -- must keep top between ops.
+        assert(#a1 == n)
+        for i = 1, n do assert(a[i] == i) end
+        done = true
+      end)
+    end
+    -- arguments to the coroutine are just to perturb its stack
+    local co = test(0); while not done do co(30) end
+    co = test(1); while not done do co(20, 10) end
+    co = test(3); while not done do co() end
+    co = test(100); while not done do co() end
+  end
 
   local line = debug.getinfo(1, "l").currentline + 2    -- get line number
   local function foo ()
