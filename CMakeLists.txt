@@ -6,7 +6,6 @@
 # Changed by Vinicius Jarina (viniciusjarina@gmail.com)
 
 PROJECT ( lua C )
-CMAKE_MINIMUM_REQUIRED ( VERSION 2.8.7 )
 
 IF (CMAKE_SIZEOF_VOID_P EQUAL 8)
 	SET (LIB_SUFFIX "64" CACHE STRING "Suffix of the directory name, e.g. 64 for lib64")
