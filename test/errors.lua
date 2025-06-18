@@ -91,7 +91,7 @@ end
 
 if not T then
   (Message or print)
-    ('\n >>> testC not active: skipping memory message test <<<\n')
+    ('\n >>> testC not active: skipping tests for messages in C <<<\n')
 else
   print "testing memory error message"
   local a = {}
@@ -104,6 +104,19 @@ else
   end)
   T.totalmem(0)
   assert(not st and msg == "not enough" .. " memory")
+
+  -- stack space for luaL_traceback (bug in 5.4.6)
+  local res = T.testC[[
+    # push 16 elements on the stack
+    pushnum 1; pushnum 1; pushnum 1; pushnum 1; pushnum 1;
+    pushnum 1; pushnum 1; pushnum 1; pushnum 1; pushnum 1;
+    pushnum 1; pushnum 1; pushnum 1; pushnum 1; pushnum 1;
+    pushnum 1;
+    # traceback should work with 4 remaining slots
+    traceback xuxu 1;
+    return 1
+  ]]
+  assert(string.find(res, "xuxu.-main chunk"))
 end
 
 
@@ -123,6 +136,10 @@ checkmessage("aaa=(1)..{}", "a table value")
 
 -- bug in 5.4.6
 checkmessage("a = {_ENV = {}}; print(a._ENV.x + 1)", "field 'x'")
+
+-- a similar bug in 5.4.7, since 5.4.0
+checkmessage("print(('_ENV').x + 1)", "field 'x'")
+
 
 _G.aaa, _G.bbbb = nil
 
@@ -395,7 +412,7 @@ lineerror("a\n=\n-\n\nprint\n;", 3)
 
 lineerror([[
 a
-( -- <<
+(     -- <<
 23)
 ]], 2)
 
@@ -404,7 +421,7 @@ local a = {x = 13}
 a
 .
 x
-( -- <<
+(     -- <<
 23
 )
 ]], 5)
