@@ -65,11 +65,14 @@
 
 
 #if defined(LUA_USE_MACOSX)
-#if !defined(LUA_USE_POSIX)
 #define LUA_USE_POSIX
-#endif
 #define LUA_USE_DLOPEN		/* MacOS does not need -ldl */
-#define LUA_USE_APPLE
+#endif
+
+
+#if defined(LUA_USE_IOS)
+#define LUA_USE_POSIX
+#define LUA_USE_DLOPEN
 #endif
 
 
@@ -141,11 +144,7 @@
 #if LUAI_IS32INT  /* use 'int' if big enough */
 #define LUA_INT_TYPE	LUA_INT_INT
 #else  /* otherwise use 'long' */
-#if defined(LUA_USE_LONGLONG)
-#define LUA_INT_TYPE	LUA_INT_LONGLONG
-#else
 #define LUA_INT_TYPE	LUA_INT_LONG
-#endif
 #endif
 #define LUA_FLOAT_TYPE	LUA_FLOAT_FLOAT
 
@@ -153,12 +152,7 @@
 /*
 ** largest types available for C89 ('long' and 'double')
 */
-#if defined(LUA_USE_LONGLONG)
-#define LUA_INT_TYPE	LUA_INT_LONGLONG
-#else
 #define LUA_INT_TYPE	LUA_INT_LONG
-#endif
-
 #define LUA_FLOAT_TYPE	LUA_FLOAT_DOUBLE
 
 #else		/* }{ */
@@ -241,15 +235,8 @@
 #endif
 
 #if !defined(LUA_CPATH_DEFAULT)
-#ifdef LUA_USE_APPLE
-#define LUA_CPATH_DEFAULT \
-		LUA_CDIR"?.so;" LUA_CDIR"loadall.so;" "./?.so;" \
-		LUA_CDIR"?.dylib;" LUA_CDIR"loadall.dylib;" "./?.dylib;" \
-		LUA_CDIR"?.framework/?;" LUA_CDIR"Frameworks/?.framework/?;" 
-#else
 #define LUA_CPATH_DEFAULT \
 		LUA_CDIR"?.so;" LUA_CDIR"loadall.so;" "./?.so"
-#endif /* !__APPLE__ */
 #endif
 
 #endif			/* } */
@@ -681,11 +668,7 @@
 ** macro must include the header 'locale.h'.)
 */
 #if !defined(lua_getlocaledecpoint)
-#ifdef __ANDROID__ /* NDK doesn't support localeconv */
-#define lua_getlocaledecpoint()		'.'
-#else
 #define lua_getlocaledecpoint()		(localeconv()->decimal_point[0])
-#endif
 #endif
 
 

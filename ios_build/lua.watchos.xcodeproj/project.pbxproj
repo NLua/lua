@@ -514,7 +514,7 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
 					LUA_USE_POSIX,
-					LUA_USE_APPLE,
+					LUA_USE_IOS,
 				);
 				INFOPLIST_FILE = Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
@@ -552,7 +552,7 @@
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
 				GCC_PREPROCESSOR_DEFINITIONS = (
-					LUA_USE_APPLE,
+					LUA_USE_IOS,
 					LUA_USE_POSIX,
 				);
 				INFOPLIST_FILE = Info.plist;
