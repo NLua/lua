@@ -45,8 +45,8 @@ TO_LIB= liblua.a
 TO_MAN= lua.1 luac.1
 
 # Lua version and release.
-V= 5.4
-R= $V.8
+V= 5.5
+R= $V.0
 
 # Targets start here.
 all:	$(PLAT)

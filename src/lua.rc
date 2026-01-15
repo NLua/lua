@@ -24,8 +24,8 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 //
 
 1 VERSIONINFO
- FILEVERSION 5,4,8,0
- PRODUCTVERSION 5,4,8,0
+ FILEVERSION 5,5,0,0
+ PRODUCTVERSION 5,5,0,0
  FILEFLAGSMASK 0x0L
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -43,12 +43,12 @@ BEGIN
             VALUE "Comments", "www.lua.org"
             VALUE "CompanyName", "Lua.org"
             VALUE "FileDescription", "Lua Console Standalone Interpreter"
-            VALUE "FileVersion", "5.4.8"
-            VALUE "LegalCopyright", "Copyright © 1994-2024 Lua.org, PUC-Rio."
+            VALUE "FileVersion", "5.5.0"
+            VALUE "LegalCopyright", "Copyright ï¿½ 1994-2025 Lua.org, PUC-Rio."
             VALUE "OriginalFilename", "lua.exe"
             VALUE "PrivateBuild", "Built for NLua"
             VALUE "ProductName", "Lua - The Programming Language"
-            VALUE "ProductVersion", "5.4.8"
+            VALUE "ProductVersion", "5.5.0"
         END
     END
     BLOCK "VarFileInfo"

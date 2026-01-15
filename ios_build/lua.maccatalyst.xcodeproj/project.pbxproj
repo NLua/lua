@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 54;
+	objectVersion = 55;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -70,7 +70,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		18D4F3042738DFCE0019B295 /* liblua54.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = liblua54.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		18D4F3042738DFCE0019B295 /* liblua55.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = liblua55.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		18E8A3302738F49B00E18839 /* lobject.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = lobject.h; path = ../include/lobject.h; sourceTree = "<group>"; };
 		18E8A3312738F49B00E18839 /* lctype.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = lctype.h; path = ../include/lctype.h; sourceTree = "<group>"; };
 		18E8A3322738F49B00E18839 /* lvm.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = lvm.h; path = ../include/lvm.h; sourceTree = "<group>"; };
@@ -156,7 +156,7 @@
 		18D4F3052738DFCE0019B295 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				18D4F3042738DFCE0019B295 /* liblua54.framework */,
+				18D4F3042738DFCE0019B295 /* liblua55.framework */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -261,7 +261,7 @@
 				18E8A35B2738F49C00E18839 /* lparser.h in Headers */,
 				18E8A3652738F49C00E18839 /* lprefix.h in Headers */,
 				18E8A3532738F49C00E18839 /* llimits.h in Headers */,
-				18E8A3542738F49C00E18839 /* lua.hpp in Headers */,
+				18E8A3552738F49C00E18839 /* lua.hpp in Headers */,
 				18E8A3522738F49C00E18839 /* ltm.h in Headers */,
 				18E8A3632738F49C00E18839 /* lopcodes.h in Headers */,
 				18E8A3602738F49C00E18839 /* lcode.h in Headers */,
@@ -276,9 +276,9 @@
 /* End PBXHeadersBuildPhase section */
 
 /* Begin PBXNativeTarget section */
-		18D4F3032738DFCE0019B295 /* liblua54 */ = {
+		18D4F3032738DFCE0019B295 /* liblua55 */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 18D4F30B2738DFCE0019B295 /* Build configuration list for PBXNativeTarget "liblua54" */;
+			buildConfigurationList = 18D4F30B2738DFCE0019B295 /* Build configuration list for PBXNativeTarget "liblua55" */;
 			buildPhases = (
 				18D4F2FF2738DFCE0019B295 /* Headers */,
 				18D4F3002738DFCE0019B295 /* Sources */,
@@ -289,9 +289,9 @@
 			);
 			dependencies = (
 			);
-			name = liblua54;
+			name = liblua55;
 			productName = catalyst;
-			productReference = 18D4F3042738DFCE0019B295 /* liblua54.framework */;
+			productReference = 18D4F3042738DFCE0019B295 /* liblua55.framework */;
 			productType = "com.apple.product-type.framework";
 		};
 /* End PBXNativeTarget section */
@@ -321,7 +321,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				18D4F3032738DFCE0019B295 /* liblua54 */,
+				18D4F3032738DFCE0019B295 /* liblua55 */,
 			);
 		};
 /* End PBXProject section */
@@ -526,7 +526,7 @@
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
 				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
-				LD_DYLIB_INSTALL_NAME = "@rpath/liblua54.framework/liblua54";
+				LD_DYLIB_INSTALL_NAME = "@rpath/liblua55.framework/liblua55";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
@@ -586,7 +586,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		18D4F30B2738DFCE0019B295 /* Build configuration list for PBXNativeTarget "liblua54" */ = {
+		18D4F30B2738DFCE0019B295 /* Build configuration list for PBXNativeTarget "liblua55" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				18D4F30C2738DFCE0019B295 /* Debug */,
