@@ -462,7 +462,7 @@ do   -- testing closing file in line iteration
 
 end
 
-
+if not _port then
 do print("testing flush")
   local f = io.output("/dev/null")
   assert(f:write("abcd"))   -- write to buffer
@@ -478,7 +478,7 @@ do print("testing flush")
   assert(not io.flush())    -- cannot write to device
   assert(f:close())
 end
-
+end
 
 -- test for multiple arguments in 'lines'
 io.output(file); io.write"0123456789\n":close()
