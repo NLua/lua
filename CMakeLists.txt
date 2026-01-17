@@ -64,7 +64,6 @@ ENDIF ()
 IF ( LUA_USE_POSIX )
   # On POSIX Lua links to standard math library "m"
   LIST ( APPEND LIBS m )
-  ADD_DEFINITIONS (-DLUA_USE_POSIX)
 ENDIF ()
 
 IF ( LUA_USE_DLOPEN AND NOT APPLE)
