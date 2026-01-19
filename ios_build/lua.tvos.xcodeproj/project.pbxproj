@@ -70,7 +70,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		1857B51421A7C3F90034C57E /* liblua54.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = liblua54.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		1857B51421A7C3F90034C57E /* liblua55.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = liblua55.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		1857B51821A7C3F90034C57E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		18A31CB522A0EDBE00883189 /* ljumptab.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ljumptab.h; path = ../include/ljumptab.h; sourceTree = "<group>"; };
 		18A31CB622A0EDBE00883189 /* lopnames.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = lopnames.h; path = ../include/lopnames.h; sourceTree = "<group>"; };
@@ -158,7 +158,7 @@
 		1857B51521A7C3F90034C57E /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				1857B51421A7C3F90034C57E /* liblua54.framework */,
+				1857B51421A7C3F90034C57E /* liblua55.framework */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -278,9 +278,9 @@
 /* End PBXHeadersBuildPhase section */
 
 /* Begin PBXNativeTarget section */
-		1857B51321A7C3F90034C57E /* liblua54 */ = {
+		1857B51321A7C3F90034C57E /* liblua55 */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 1857B51C21A7C3F90034C57E /* Build configuration list for PBXNativeTarget "liblua54" */;
+			buildConfigurationList = 1857B51C21A7C3F90034C57E /* Build configuration list for PBXNativeTarget "liblua55" */;
 			buildPhases = (
 				1857B50F21A7C3F90034C57E /* Headers */,
 				1857B51021A7C3F90034C57E /* Sources */,
@@ -291,9 +291,9 @@
 			);
 			dependencies = (
 			);
-			name = liblua54;
-			productName = lua54;
-			productReference = 1857B51421A7C3F90034C57E /* liblua54.framework */;
+			name = liblua55;
+			productName = lua55;
+			productReference = 1857B51421A7C3F90034C57E /* liblua55.framework */;
 			productType = "com.apple.product-type.framework";
 		};
 /* End PBXNativeTarget section */
@@ -322,7 +322,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				1857B51321A7C3F90034C57E /* liblua54 */,
+				1857B51321A7C3F90034C57E /* liblua55 */,
 			);
 		};
 /* End PBXProject section */
@@ -566,7 +566,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		1857B51C21A7C3F90034C57E /* Build configuration list for PBXNativeTarget "liblua54" */ = {
+		1857B51C21A7C3F90034C57E /* Build configuration list for PBXNativeTarget "liblua55" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				1857B51D21A7C3F90034C57E /* Debug */,

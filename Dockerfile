@@ -26,4 +26,4 @@ RUN mkdir build && \
 
 # Final stage: just keep the artifact
 FROM scratch AS artifact
-COPY --from=builder /opt/lua/build/lib64/liblua54.so /
+COPY --from=builder /opt/lua/build/lib64/liblua55.so /

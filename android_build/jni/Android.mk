@@ -1,7 +1,7 @@
 LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 LOCAL_C_INCLUDES += ../include 
-LOCAL_MODULE    := lua54
+LOCAL_MODULE    := lua55
 LOCAL_LDFLAGS += "-Wl,-z,max-page-size=16384"
 LOCAL_CFLAGS := -DLUA_USE_POSIX -DLUA_USE_C89 -DLUA_USE_LONGLONG -I../include
 LOCAL_SRC_FILES :=  \
