@@ -1,8 +1,9 @@
 -- $Id: testes/strings.lua $
--- See Copyright Notice in file all.lua
+-- See Copyright Notice in file lua.h
 
 -- ISO Latin encoding
 
+global <const> *
 
 print('testing strings and string library')
 
@@ -109,10 +110,9 @@ assert(string.rep('teste', 0) == '')
 assert(string.rep('tés\00tê', 2) == 'tés\0têtés\000tê')
 assert(string.rep('', 10) == '')
 
-if string.packsize("i") == 4 then
-  -- result length would be 2^31 (int overflow)
-  checkerror("too large", string.rep, 'aa', (1 << 30))
-  checkerror("too large", string.rep, 'a', (1 << 30), ',')
+do
+  checkerror("too large", string.rep, 'aa', math.maxinteger);
+  checkerror("too large", string.rep, 'a', math.maxinteger, ',')
 end
 
 -- repetitions with separator
@@ -157,6 +157,12 @@ else   -- compatible coercion
   assert(tostring(-1203 + 0.0) == "-1203")
 end
 
+
+local function topointer (s)
+  return string.format("%p", s)
+end
+
+
 do  -- tests for '%p' format
   -- not much to test, as C does not specify what '%p' does.
   -- ("The value of the pointer is converted to a sequence of printing
@@ -180,18 +186,18 @@ do  -- tests for '%p' format
 
   do
     local t1 = {}; local t2 = {}
-    assert(string.format("%p", t1) ~= string.format("%p", t2))
+    assert(topointer(t1) ~= topointer(t2))
   end
 
   do     -- short strings are internalized
     local s1 = string.rep("a", 10)
     local s2 = string.rep("aa", 5)
-  assert(string.format("%p", s1) == string.format("%p", s2))
+  assert(topointer(s1) == topointer(s2))
   end
 
   do     -- long strings aren't internalized
     local s1 = string.rep("a", 300); local s2 = string.rep("a", 300)
-    assert(string.format("%p", s1) ~= string.format("%p", s2))
+    assert(topointer(s1) ~= topointer(s2))
   end
 end
 
@@ -521,6 +527,37 @@ else
   testpfs("P", str, {})
 end
 
+if T == nil then
+  (Message or print)('\n >>> testC not active: skipping external strings tests <<<\n')
+else
+  print("testing external strings")
+  local x = T.externKstr("hello")   -- external fixed short string
+  assert(x == "hello")
+  local x = T.externstr("hello")   -- external allocated short string
+  assert(x == "hello")
+  x = string.rep("a", 100)   -- long string
+  local y = T.externKstr(x)   -- external fixed long string
+  assert(y == x)
+  local z = T.externstr(x)   -- external allocated long string
+  assert(z == y)
+
+  local e = T.externstr("")   -- empty external string
+  assert(e .. "x" == "x" and "x" .. e == "x")
+  assert(e .. e == "" and #e == 0)
+
+  -- external string as the "n" key in vararg table
+  local n = T.externstr("n")
+  local n0 = T.externstr("n\0")
+  local function aux (...t) assert(t[n0] == nil); return t[n] end
+  assert(aux(10, 20, 30) == 3)
+
+  -- external string as mode in weak table
+  local t = setmetatable({}, {__mode = T.externstr("kv")})
+  t[{}] = {}
+  assert(next(t))
+  collectgarbage()
+  assert(next(t) == nil)
+end
 
 print('OK')
 
