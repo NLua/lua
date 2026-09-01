@@ -509,7 +509,6 @@
 					"DEBUG=1",
 					"$(inherited)",
 					LUA_USE_IOS,
-					LUA_USE_POSIX,
 				);
 				INFOPLIST_FILE = Info.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";

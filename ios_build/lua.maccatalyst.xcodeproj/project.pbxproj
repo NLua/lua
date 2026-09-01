@@ -424,7 +424,6 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"$(inherited)",
-					LUA_USE_POSIX,
 					LUA_USE_IOS,
 				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
