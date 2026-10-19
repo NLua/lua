@@ -1,16 +1,10 @@
-# Use Ubuntu 18.04 as base
-FROM ubuntu:18.04 AS builder
+# Use Ubuntu 22.04 for Clang with SafeStack support
+FROM ubuntu:22.04 AS builder
 
-# Install required packages: build-essential, cmake, gcc-5
+# Install required packages: clang, cmake
 RUN apt-get update && \
-    apt-get install -y build-essential cmake gcc-5 g++-5 && \
-    rm -rf /var/libdocker buildx ls/apt/lists/*
-
-# Set GCC 5 as default
-RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-5 60 \
-    && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-5 60 \
-    && update-alternatives --config gcc \
-    && update-alternatives --config g++
+    apt-get install -y clang cmake && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy local Lua directory into container
 COPY . /opt/lua
@@ -18,10 +12,14 @@ COPY . /opt/lua
 # Set working directory
 WORKDIR /opt/lua
 
-# Create build directory and build with CMake
+# Create build directory and build with CMake using Clang and SafeStack
 RUN mkdir build && \
     cd build && \
-    cmake -DCMAKE_BUILD_TYPE=Release .. && \
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_C_COMPILER=clang \
+          -DCMAKE_C_FLAGS="-fsanitize=safe-stack" \
+          -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=safe-stack" \
+          .. && \
     cmake --build . --config Release
 
 # Final stage: just keep the artifact
